@@ -19,7 +19,7 @@ internal static class BackendHost
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                return ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
+                return ActivatorUtilities.CreateInstance<Tp358.Ble.Windows.WindowsAdvertisementSource>(sp);
             }
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
