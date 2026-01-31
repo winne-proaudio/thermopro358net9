@@ -86,3 +86,4 @@ coverage.xml
 # =========================
 # JetBrains "Scratches and Consoles" are outside repo normally, but ignore if present
 Scratches and Consoles/
+nul

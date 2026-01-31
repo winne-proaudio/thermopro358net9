@@ -11,14 +11,18 @@ public sealed class ScannerWorker(
     ILogger<ScannerWorker> logger
 ) : BackgroundService
 {
+    private readonly Dictionary<string, DateTimeOffset> _lastSentPerDevice = new();
+    private readonly TimeSpan _sendInterval = TimeSpan.FromSeconds(30);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("ScannerWorker gestartet. Warte auf BLE Advertisements...");
+        logger.LogInformation("SignalR-Weiterleitungs-Interval: {Interval} Sekunden pro Gerät", _sendInterval.TotalSeconds);
         
         await foreach (var frame in source.WatchAsync(stoppingToken))
         {
             var payloadHex = BitConverter.ToString(frame.ManufacturerPayload);
-            logger.LogInformation("Advertisement empfangen: MAC={Mac}, CompanyId=0x{CompanyId:X4}, Payload Length={Length}, RSSI={Rssi}, Raw={Raw}", 
+            logger.LogDebug("Advertisement empfangen: MAC={Mac}, CompanyId=0x{CompanyId:X4}, Payload Length={Length}, RSSI={Rssi}, Raw={Raw}", 
                 frame.DeviceMac, frame.CompanyId, frame.ManufacturerPayload.Length, frame.Rssi, payloadHex);
 
             // Accept both TP358 (4 bytes) and TP358S (5 bytes)
@@ -26,6 +30,19 @@ public sealed class ScannerWorker(
             {
                 logger.LogDebug("Payload-Länge {Length} übersprungen (erwartet: 4 oder 5)", frame.ManufacturerPayload.Length);
                 continue;
+            }
+
+            // Check if enough time has passed since last send for this device
+            var now = DateTimeOffset.UtcNow;
+            if (_lastSentPerDevice.TryGetValue(frame.DeviceMac, out var lastSent))
+            {
+                var elapsed = now - lastSent;
+                if (elapsed < _sendInterval)
+                {
+                    logger.LogTrace("Gerät {Mac}: Übersprungen, letztes Senden vor {Elapsed:F1}s (Interval: {Interval}s)", 
+                        frame.DeviceMac, elapsed.TotalSeconds, _sendInterval.TotalSeconds);
+                    continue;
+                }
             }
 
             Tp358Reading reading;
@@ -54,6 +71,9 @@ public sealed class ScannerWorker(
                 deviceType, dto.DeviceMac, dto.TemperatureC, dto.HumidityPercent, dto.BatteryPercent);
 
             await hub.Clients.All.SendAsync("reading", dto, cancellationToken: stoppingToken);
+            
+            // Update last sent timestamp for this device
+            _lastSentPerDevice[frame.DeviceMac] = now;
         }
     }
 }
