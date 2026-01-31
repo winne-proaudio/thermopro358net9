@@ -3,9 +3,10 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:Tp358.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="980" d:DesignHeight="520"
+             mc:Ignorable="d" d:DesignWidth="630" d:DesignHeight="530"
              x:Class="Tp358.Desktop.Views.MainView"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+             >
   <Design.DataContext>
     <x:Static Member="vm:DesignData.MainViewModel"/>
   </Design.DataContext>
@@ -32,8 +33,8 @@
         <ItemsControl ItemsSource="{Binding Devices}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <Border Background="#F0F0F0" Padding="20" CornerRadius="8" Margin="0,0,0,12">
-                <StackPanel Spacing="10">
+              <Border Background="#F0F0F0" Padding="15" CornerRadius="8" Margin="0,0,0,12">
+                <StackPanel Spacing="5">
                   <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#333">
                     <Run Text="{Binding DeviceName}"/>
                   </TextBlock>
