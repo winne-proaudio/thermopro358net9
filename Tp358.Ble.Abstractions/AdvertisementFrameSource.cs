@@ -4,7 +4,8 @@ public sealed record AdvertisementFrame(
     DateTimeOffset Timestamp,
     string DeviceMac,
     int Rssi,
-    byte[] ManufacturerPayload
+    byte[] ManufacturerPayload,
+    ushort CompanyId
 );
 
 public interface IAdvertisementSource
