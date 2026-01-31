@@ -8,16 +8,20 @@ namespace Tp358.Backend;
 public sealed class ScannerWorker(
     IAdvertisementSource source,
     IHubContext<LiveHub> hub,
+    DatabaseService databaseService,
     ILogger<ScannerWorker> logger
 ) : BackgroundService
 {
     private readonly Dictionary<string, DateTimeOffset> _lastSentPerDevice = new();
+    private readonly Dictionary<string, Tp358ReadingDto> _latestReadings = new();
     private readonly TimeSpan _sendInterval = TimeSpan.FromSeconds(30);
+
+    public IReadOnlyDictionary<string, Tp358ReadingDto> GetLatestReadings() => _latestReadings;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("ScannerWorker gestartet. Warte auf BLE Advertisements...");
-        logger.LogInformation("SignalR-Weiterleitungs-Interval: {Interval} Sekunden pro Gerät", _sendInterval.TotalSeconds);
+        logger.LogInformation("SignalR- und Datenbank-Interval: {Interval} Sekunden pro Gerät", _sendInterval.TotalSeconds);
         
         await foreach (var frame in source.WatchAsync(stoppingToken))
         {
@@ -71,9 +75,18 @@ public sealed class ScannerWorker(
                 deviceType, dto.DeviceMac, dto.TemperatureC, dto.HumidityPercent, dto.BatteryPercent);
 
             await hub.Clients.All.SendAsync("reading", dto, cancellationToken: stoppingToken);
-            
-            // Update last sent timestamp for this device
+
+            // Save to database
+            await databaseService.InsertMeasurementAsync(
+                dto.DeviceMac,
+                dto.TemperatureC,
+                dto.HumidityPercent,
+                dto.Timestamp,
+                stoppingToken);
+
+            // Update last sent timestamp and latest reading for this device
             _lastSentPerDevice[frame.DeviceMac] = now;
+            _latestReadings[frame.DeviceMac] = dto;
         }
     }
 }

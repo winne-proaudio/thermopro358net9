@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TP358 Backend Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status {
+            background: white;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .sensor-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .sensor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .sensor-name {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .sensor-mac {
+            font-size: 0.8em;
+            color: #9ca3af;
+            font-family: 'Courier New', monospace;
+            margin-top: 2px;
+        }
+
+        .sensor-time {
+            font-size: 0.85em;
+            color: #6b7280;
+        }
+
+        .sensor-data {
+            display: grid;
+            gap: 15px;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .data-label {
+            font-weight: 500;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .data-value {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .temp { color: #ef4444; }
+        .humidity { color: #3b82f6; }
+        .battery { color: #10b981; }
+        .signal { color: #f59e0b; }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌡️ TP358 Backend Monitor</h1>
+
+        <div class="status">
+            <div class="status-indicator"></div>
+            <span id="connectionStatus">Verbinde mit Backend...</span>
+        </div>
+
+        <div id="sensorsContainer" class="sensors-grid"></div>
+
+        <div id="noData" class="no-data" style="display: none;">
+            Warte auf Sensordaten...
+        </div>
+
+        <div class="footer">
+            TP358 Backend Monitor | Live-Daten via SignalR
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script>
+        const sensors = new Map();
+
+        const deviceNames = {
+            "FB:B9:30:BB:5E:55": "Plantage",
+            "F4:B8:2A:C1:37:AF": "Katzenzimmer",
+            "FA:C2:7D:1A:C3:EA": "Marie"
+        };
+
+        function getDeviceName(mac) {
+            return deviceNames[mac] || "Unbekanntes Gerät";
+        }
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/live")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("reading", (data) => {
+            sensors.set(data.deviceMac, data);
+            updateDisplay();
+        });
+
+        connection.start()
+            .then(() => {
+                document.getElementById('connectionStatus').textContent = '✓ Verbunden mit Backend';
+            })
+            .catch(err => {
+                document.getElementById('connectionStatus').textContent = '✗ Verbindung fehlgeschlagen';
+                console.error('SignalR Error:', err);
+            });
+
+        connection.onreconnecting(() => {
+            document.getElementById('connectionStatus').textContent = '↻ Verbindung wird wiederhergestellt...';
+        });
+
+        connection.onreconnected(() => {
+            document.getElementById('connectionStatus').textContent = '✓ Verbunden mit Backend';
+        });
+
+        function updateDisplay() {
+            const container = document.getElementById('sensorsContainer');
+            const noData = document.getElementById('noData');
+
+            if (sensors.size === 0) {
+                container.style.display = 'none';
+                noData.style.display = 'block';
+                return;
+            }
+
+            container.style.display = 'grid';
+            noData.style.display = 'none';
+
+            container.innerHTML = '';
+
+            sensors.forEach((data, mac) => {
+                const card = document.createElement('div');
+                card.className = 'sensor-card';
+
+                const time = new Date(data.timestamp).toLocaleTimeString('de-DE');
+                const temp = data.temperatureC?.toFixed(1) ?? 'n/a';
+                const humidity = data.humidityPercent ?? 'n/a';
+                const battery = data.batteryPercent ?? 'n/a';
+                const rssi = data.rssi;
+                const deviceName = getDeviceName(mac);
+
+                card.innerHTML = `
+                    <div class="sensor-header">
+                        <div>
+                            <div class="sensor-name">${deviceName}</div>
+                            <div class="sensor-mac">(${mac})</div>
+                        </div>
+                        <div class="sensor-time">${time}</div>
+                    </div>
+                    <div class="sensor-data">
+                        <div class="data-item">
+                            <div class="data-label">
+                                <span class="icon">🌡️</span>
+                                Temperatur
+                            </div>
+                            <div class="data-value temp">${temp} °C</div>
+                        </div>
+                        <div class="data-item">
+                            <div class="data-label">
+                                <span class="icon">💧</span>
+                                Luftfeuchtigkeit
+                            </div>
+                            <div class="data-value humidity">${humidity} %</div>
+                        </div>
+                        <div class="data-item">
+                            <div class="data-label">
+                                <span class="icon">🔋</span>
+                                Batterie
+                            </div>
+                            <div class="data-value battery">${battery} %</div>
+                        </div>
+                        <div class="data-item">
+                            <div class="data-label">
+                                <span class="icon">📡</span>
+                                Signal
+                            </div>
+                            <div class="data-value signal">${rssi} dBm</div>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
