@@ -1,0 +1,102 @@
+﻿# Default ignored files
+/shelf/
+/workspace.xml
+# Rider ignored files
+/contentModel.xml
+/projectSettingsUpdater.xml
+/modules.xml
+/.idea.ThermoProTp358.iml
+# Ignored default folder with query files
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+# =========================
+# .NET / C# (Rider + Windows/Linux)
+# =========================
+
+# Build output
+**/bin/
+**/obj/
+**/out/
+
+# User-specific / IDE
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / IntelliJ (recommended: ignore whole .idea folder)
+.idea/
+# If you *intentionally* want to keep shared .idea settings, remove the line above
+# and instead ignore only local stuff like this:
+# .idea/**/workspace.xml
+# .idea/**/tasks.xml
+# .idea/**/shelf/
+# .idea/**/httpRequests/
+# .idea/**/dataSources/
+# .idea/**/dataSources.local.xml
+
+# Visual Studio / VS Code (harmless even if unused)
+.vs/
+.vscode/
+
+# OS noise
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# =========================
+# NuGet
+# =========================
+# Packages folder (only if you use packages.config; safe to ignore anyway)
+packages/
+
+# NuGet v3 lock files (keep them if you use lock-mode intentionally)
+# packages.lock.json
+
+# NuGet http cache / temp (rare in repo, but safe)
+.nuget/
+
+# =========================
+# Test results / coverage
+# =========================
+TestResults/
+coverage/
+coverage.xml
+*.coverage
+*.coveragexml
+
+# =========================
+# Publish artifacts
+# =========================
+**/publish/
+**/*.Publish.xml
+**/*.pubxml
+**/*.pubxml.user
+
+# =========================
+# Azure / Web deploy (optional)
+# =========================
+**/appsettings.*.json.user
+
+# =========================
+# Avalonia / XAML generated artifacts
+# =========================
+# (Most generated files are already under obj/, but keep these just in case)
+*.g.cs
+*.g.i.cs
+*.baml
+*.axaml.cache
+
+# =========================
+# Misc
+# =========================
+# JetBrains "Scratches and Consoles" are outside repo normally, but ignore if present
+Scratches and Consoles/
