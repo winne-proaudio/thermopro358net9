@@ -43,7 +43,7 @@ public partial class MainViewModel : ObservableObject
             Console.WriteLine("[Desktop] Verbinde zu http://localhost:5055/live...");
 
             _connection = new HubConnectionBuilder()
-                .WithUrl("http://localhost:5055/live")
+                .WithUrl("http://192.168.1.119:5055/live")
                 .WithAutomaticReconnect()
                 .Build();
 
