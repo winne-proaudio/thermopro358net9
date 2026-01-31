@@ -25,11 +25,15 @@ public sealed class FakeAdvertisementSource : IAdvertisementSource
             payload[3] = (byte)(rawTemp >> 8);
             payload[4] = 0x01;
 
+            // Encode temperature in CompanyId high byte: temp * 10
+            ushort companyId = (ushort)(0x00C2 | ((byte)(temp * 10) << 8));
+            
             yield return new AdvertisementFrame(
                 Timestamp: DateTimeOffset.UtcNow,
                 DeviceMac: mac,
                 Rssi: -55 - rnd.Next(0, 8),
-                ManufacturerPayload: payload
+                ManufacturerPayload: payload,
+                CompanyId: companyId
             );
 
             await Task.Delay(1000, ct);

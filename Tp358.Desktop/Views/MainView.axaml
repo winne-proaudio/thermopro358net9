@@ -1,28 +1,98 @@
 ﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:Tp358.Desktop.ViewModels"
-             x:Class="Tp358.Desktop.Views.MainView">
-  <UserControl.DataContext>
-    <vm:MainViewModel/>
-  </UserControl.DataContext>
+             mc:Ignorable="d" d:DesignWidth="980" d:DesignHeight="520"
+             x:Class="Tp358.Desktop.Views.MainView"
+             x:DataType="vm:MainViewModel">
+  <Design.DataContext>
+    <x:Static Member="vm:DesignData.MainViewModel"/>
+  </Design.DataContext>
 
   <DockPanel Margin="12">
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10">
       <TextBlock VerticalAlignment="Center" Text="{Binding Status}"/>
       <Button Content="Connect" Command="{Binding ConnectCommand}"/>
       <Button Content="Disconnect" Command="{Binding DisconnectCommand}"/>
+      <TextBlock VerticalAlignment="Center" Margin="20,0,0,0">
+        <Run Text="Readings: "/>
+        <Run Text="{Binding Readings.Count}"/>
+      </TextBlock>
     </StackPanel>
 
-    <DataGrid ItemsSource="{Binding Readings}" Margin="0,12,0,0" IsReadOnly="True" AutoGenerateColumns="False">
-      <DataGrid.Columns>
-        <DataGridTextColumn Header="Time" Binding="{Binding Timestamp}"/>
-        <DataGridTextColumn Header="MAC" Binding="{Binding DeviceMac}"/>
-        <DataGridTextColumn Header="RSSI" Binding="{Binding Rssi}"/>
-        <DataGridTextColumn Header="Temp (°C)" Binding="{Binding TemperatureC}"/>
-        <DataGridTextColumn Header="RH (%)" Binding="{Binding HumidityPercent}"/>
-        <DataGridTextColumn Header="Bat (%)" Binding="{Binding BatteryPercent}"/>
-        <DataGridTextColumn Header="Raw" Binding="{Binding RawPayloadHex}"/>
-      </DataGrid.Columns>
-    </DataGrid>
+    <Grid Margin="0,12,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <!-- All Devices Display -->
+      <ScrollViewer Grid.Row="0" MaxHeight="800" VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding Devices}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="#F0F0F0" Padding="20" CornerRadius="8" Margin="0,0,0,12">
+                <StackPanel Spacing="10">
+                  <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#333">
+                    <Run Text="{Binding DeviceName}"/>
+                  </TextBlock>
+                  <TextBlock FontSize="11" Foreground="#999" Margin="0,-8,0,0">
+                    <Run Text="{Binding DeviceMac}"/>
+                  </TextBlock>
+                  <StackPanel Orientation="Horizontal" Spacing="30">
+                    <StackPanel>
+                      <TextBlock Text="Temperatur" FontSize="12" Foreground="#666"/>
+                      <TextBlock FontSize="36" FontWeight="Bold" Foreground="#FF6B35">
+                        <Run Text="{Binding Readings[0].TemperatureC, StringFormat=F1}"/>
+                        <Run Text="°C" FontSize="24"/>
+                      </TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Text="Luftfeuchtigkeit" FontSize="12" Foreground="#666"/>
+                      <TextBlock FontSize="36" FontWeight="Bold" Foreground="#004E89">
+                        <Run Text="{Binding Readings[0].HumidityPercent}"/>
+                        <Run Text="%" FontSize="24"/>
+                      </TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Text="Batterie" FontSize="12" Foreground="#666"/>
+                      <TextBlock FontSize="24" FontWeight="Bold" Foreground="#2A9D8F">
+                        <Run Text="{Binding Readings[0].BatteryPercent}"/>
+                        <Run Text="%" FontSize="18"/>
+                      </TextBlock>
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Text="Signalstärke" FontSize="12" Foreground="#666"/>
+                      <TextBlock FontSize="24" FontWeight="Bold" Foreground="#6B4E71">
+                        <Run Text="{Binding Readings[0].Rssi}"/>
+                        <Run Text="dBm" FontSize="16"/>
+                      </TextBlock>
+                    </StackPanel>
+                  </StackPanel>
+                  <TextBlock FontSize="11" Foreground="#999">
+                    <Run Text="Letztes Update: "/>
+                    <Run Text="{Binding Readings[0].Timestamp, StringFormat='HH:mm:ss'}"/>
+                  </TextBlock>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <!-- Data Grid -->
+      <DataGrid Grid.Row="1" ItemsSource="{Binding Readings}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="All">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Time" Binding="{Binding Timestamp, StringFormat='HH:mm:ss'}"/>
+          <DataGridTextColumn Header="MAC" Binding="{Binding DeviceMac}"/>
+          <DataGridTextColumn Header="RSSI" Binding="{Binding Rssi}"/>
+          <DataGridTextColumn Header="Temp (°C)" Binding="{Binding TemperatureC, StringFormat=F1}"/>
+          <DataGridTextColumn Header="RH (%)" Binding="{Binding HumidityPercent}"/>
+          <DataGridTextColumn Header="Bat (%)" Binding="{Binding BatteryPercent}"/>
+          <DataGridTextColumn Header="Raw" Binding="{Binding RawPayloadHex}"/>
+        </DataGrid.Columns>
+      </DataGrid>
+    </Grid>
   </DockPanel>
 </UserControl>

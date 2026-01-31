@@ -6,50 +6,66 @@ public static class Tp358AdvertisingParser
     /// Parses ThermoPro TP358 / TP358S manufacturer payload (bytes AFTER the 16-bit company ID).
     /// Observed payload lengths:
     /// - TP358  : 4 bytes  -> humidity present, temperature typically NOT present
-    /// - TP358S : 5 bytes  -> temperature present in bytes [2..3] (uint16 LE, /256 °C)
+    /// - TP358S : 5 bytes  -> temperature encoded in CompanyId high byte, humidity in payload byte[1]
     /// </summary>
-    public static Tp358Reading Parse(ReadOnlySpan<byte> payload)
+    public static Tp358Reading Parse(ReadOnlySpan<byte> payload, ushort companyId)
     {
         return payload.Length switch
         {
-            4 => ParseTp358(payload),
-            5 => ParseTp358S(payload),
+            4 => ParseTp358(payload, companyId),
+            5 => ParseTp358S(payload, companyId),
             _ => throw new ArgumentException($"Unsupported TP358 payload length: {payload.Length}", nameof(payload))
         };
     }
 
-    private static Tp358Reading ParseTp358(ReadOnlySpan<byte> d)
+    private static Tp358Reading ParseTp358(ReadOnlySpan<byte> d, ushort companyId)
     {
-        // Observed:
-        // d[2] = humidity %RH (0..100)
-        // d[0], d[1], d[3] appear to be flags/counter/other (device/firmware specific)
-        int humidity = d[2];
+        // TP358 observed (payload length 4):
+        // CompanyId format: likely 0xTTC2 where TT = temperature * 10 (same as TP358S)
+        // Example observations:
+        // CompanyId=0xDFC2, Payload=00-31-00-2C
+        // CompanyId=0xCDC2, Payload=00-37-02-2C
+        // 
+        // Testing hypothesis:
+        // - Temperature from CompanyId high byte / 10
+        // - Humidity from payload byte[1] (like TP358S)
+        
+        // Extract temperature from CompanyId high byte / 10
+        byte tempByte = (byte)(companyId >> 8);
+        double temperatureC = tempByte / 10.0;
+        
+        // Extract humidity from byte[1]
+        int humidityPercent = d[1];
+        
+        // Log for debugging
+        System.Console.WriteLine($"[TP358 Parser] CompanyId=0x{companyId:X4}, TempByte=0x{tempByte:X2}={tempByte} → {temperatureC}°C, HumidityByte=0x{d[1]:X2}={d[1]} → {humidityPercent}%");
 
         return new Tp358Reading
         {
-            HumidityPercent = humidity
+            TemperatureC = temperatureC,
+            HumidityPercent = humidityPercent
         };
     }
 
-    private static Tp358Reading ParseTp358S(ReadOnlySpan<byte> d)
+    private static Tp358Reading ParseTp358S(ReadOnlySpan<byte> d, ushort companyId)
     {
         // TP358S observed (payload length 5):
-        // d[0..1] : humidity as uint16 little-endian, scaled by 1/256 %RH
-        // d[2..3] : temperature as uint16 little-endian, scaled by 1/256 °C, with an observed offset
-        // d[4]    : status/battery-ish byte (heuristic)
-        ushort rawRh = (ushort)(d[0] | (d[1] << 8));
-        int humidityPercent = (int)Math.Round(rawRh / 256.0);
+        // CompanyId format: 0xTTC2 where TT = temperature * 10
+        // Example: CompanyId=0xA9C2 → temp = 0xA9 = 169 → 16.9°C
+        // Payload format: [RH_low] [RH_high] [??] [??] [Status]
+        // Payload example: 00-28-22-1B-01
+        //   d[0] = 0x00  (unused)
+        //   d[1] = 0x28  → humidity = 0x28 = 40%
+        //   d[2] = 0x22  → unknown constant
+        //   d[3] = 0x1B  → unknown constant
+        //   d[4] = 0x01  → status/battery
+        
+        // Extract humidity from byte[1] directly (not /256!)
+        int humidityPercent = d[1];
 
-        ushort rawTemp = (ushort)(d[2] | (d[3] << 8));
-
-        // Empirically derived from your device:
-        // raw=0x1B22 -> 27.1°C by /256, but display shows ~22.4°C
-        // (raw - 1200)/256 ~= 22.4°C
-        const int TempOffset = 1200;
-        double temperatureCExact = (rawTemp - TempOffset) / 256.0;
-
-        // Optional: "Display-like" truncation to 0.1°C (instead of rounding)
-        double temperatureC = Math.Truncate(temperatureCExact * 10.0) / 10.0;
+        // Extract temperature from CompanyId high byte / 10
+        byte tempByte = (byte)(companyId >> 8);
+        double temperatureC = tempByte / 10.0;
 
         int? battery = TryDecodeBatteryHeuristic(d[4]);
 

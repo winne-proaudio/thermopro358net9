@@ -27,18 +27,27 @@ public sealed class WindowsAdvertisementSource : IAdvertisementSource
                 {
                     ushort companyId = md.CompanyId;
                     bool looksLikeTp = ((companyId & 0x00FF) == 0x00C2) || ((companyId & 0xFF00) == 0xC200);
-                    if (!looksLikeTp) continue;
-
+                    
                     var payload = ReadAll(md.Data);
-                    if (payload.Length != 5) continue;
+                    
+                    // Debug logging: show ALL manufacturer data
+                    if (looksLikeTp)
+                    {
+                        var addr = FormatBluetoothAddress(e.BluetoothAddress);
+                        System.Console.WriteLine($"[BLE] Device={addr}, CompanyId=0x{companyId:X4}, PayloadLength={payload.Length}, Payload={BitConverter.ToString(payload.ToArray())}");
+                    }
+                    
+                    if (!looksLikeTp) continue;
+                    if (payload.Length != 4 && payload.Length != 5) continue;
 
-                    var addr = FormatBluetoothAddress(e.BluetoothAddress);
+                    var addr2 = FormatBluetoothAddress(e.BluetoothAddress);
 
                     var frame = new AdvertisementFrame(
                         Timestamp: DateTimeOffset.UtcNow,
-                        DeviceMac: addr,
+                        DeviceMac: addr2,
                         Rssi: e.RawSignalStrengthInDBm,
-                        ManufacturerPayload: payload.ToArray()
+                        ManufacturerPayload: payload.ToArray(),
+                        CompanyId: companyId
                     );
 
                     channel.Writer.TryWrite(frame);
