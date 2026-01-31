@@ -1,0 +1,9 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Tp358.Desktop.Views"
+        xmlns:av="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        x:Class="Tp358.Desktop.Views.MainWindow"
+        Width="980" Height="520"
+        Title="TP358 Desktop">
+  <views:MainView/>
+</Window>
