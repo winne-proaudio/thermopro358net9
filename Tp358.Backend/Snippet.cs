@@ -79,7 +79,8 @@ public sealed class FakeAdvertisementSource : IAdvertisementSource
                 payload[1] = (byte)(rawRh >> 8);
                 payload[2] = (byte)(rawTemp & 0xFF);
                 payload[3] = (byte)(rawTemp >> 8);
-                payload[4] = 0x01;
+                // Marker for fake data: set an unrealistic battery/status value.
+                payload[4] = 0xFF;
 
                 // Encode temperature in CompanyId high byte: temp * 10
                 ushort companyId = (ushort)(0x00C2 | ((byte)(temp * 10) << 8));

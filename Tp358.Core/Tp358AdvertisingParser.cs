@@ -80,6 +80,17 @@ public static class Tp358AdvertisingParser
     private static int? TryDecodeBatteryHeuristic(byte status)
     {
         // Heuristic placeholder (your logs showed 0x01). Return null for unknown values.
-        return status == 0x01 ? 100 : null;
+        if (status == 0x01)
+        {
+            return 100;
+        }
+
+        // Debug/fake marker: show an obviously unrealistic battery percent.
+        if (status == 0xFF)
+        {
+            return 255;
+        }
+
+        return null;
     }
 }

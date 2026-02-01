@@ -20,6 +20,26 @@ public sealed class ScannerWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var sourceType = source.GetType().FullName ?? source.GetType().Name;
+        var sourceLabel = sourceType.Contains("FakeAdvertisementSource", StringComparison.OrdinalIgnoreCase)
+            ? "FAKE (simuliert)"
+            : sourceType.Contains("BlueZ", StringComparison.OrdinalIgnoreCase)
+                ? "BlueZ (echt)"
+                : sourceType.Contains("WindowsAdvertisementSource", StringComparison.OrdinalIgnoreCase)
+                    ? "Windows BLE (echt)"
+                    : sourceType.Contains("FallbackAdvertisementSource", StringComparison.OrdinalIgnoreCase)
+                        ? "Fallback (echt oder Fake bei Fehlern)"
+                        : sourceType;
+
+        if (sourceLabel.StartsWith("FAKE", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("BLE-Quelle: {Source}", sourceLabel);
+        }
+        else
+        {
+            logger.LogInformation("BLE-Quelle: {Source}", sourceLabel);
+        }
+
         logger.LogInformation("ScannerWorker gestartet. Warte auf BLE Advertisements...");
         logger.LogInformation("SignalR- und Datenbank-Interval: {Interval} Sekunden pro Gerät", _sendInterval.TotalSeconds);
         
