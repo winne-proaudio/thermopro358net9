@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Tp358.Core\Tp358.Core.csproj" />
     <ProjectReference Include="..\Tp358.Ble.Abstractions\Tp358.Ble.Abstractions.csproj" />
     <ProjectReference Include="..\Tp358.Ble.Windows\Tp358.Ble.Windows.csproj" Condition="'$(TargetFramework)' == 'net9.0-windows10.0.19041.0'" />
+    <ProjectReference Include="..\Tp358.Ble.BlueZ\Tp358.Ble.BlueZ.csproj" Condition="'$(TargetFramework)' == 'net9.0'" />
   </ItemGroup>
 
   <ItemGroup>

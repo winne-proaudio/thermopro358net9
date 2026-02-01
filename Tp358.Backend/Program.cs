@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.IO;
 using System.Runtime.InteropServices;
 using Tp358.Ble.Abstractions;
 
@@ -28,7 +29,14 @@ internal static class BackendHost
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                return ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
+                if (!Directory.Exists("/sys/class/bluetooth"))
+                {
+                    return ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
+                }
+
+                var primary = ActivatorUtilities.CreateInstance<Tp358.Ble.BlueZ.BlueZAdvertisementSource>(sp);
+                var fallback = ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
+                return ActivatorUtilities.CreateInstance<FallbackAdvertisementSource>(sp, primary, fallback);
             }
 
             return ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
