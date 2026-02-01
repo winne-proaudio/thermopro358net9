@@ -40,6 +40,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .status-indicator {
@@ -151,6 +152,31 @@
             margin-top: 30px;
             opacity: 0.8;
         }
+
+        .shutdown-btn {
+            margin-left: 8px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 8px;
+            background: #ef4444;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.35);
+        }
+
+        .shutdown-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(239, 68, 68, 0.4);
+        }
+
+        .shutdown-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+            box-shadow: none;
+            transform: none;
+        }
     </style>
 </head>
 <body>
@@ -160,6 +186,9 @@
         <div class="status">
             <div class="status-indicator"></div>
             <span id="connectionStatus">Verbinde mit Backend...</span>
+            <button id="shutdownButton" class="shutdown-btn" type="button" disabled>
+                Backend herunterfahren
+            </button>
         </div>
 
         <div id="sensorsContainer" class="sensors-grid"></div>
@@ -187,6 +216,41 @@
             return deviceNames[mac] || "Unbekanntes Gerät";
         }
 
+        const shutdownButton = document.getElementById('shutdownButton');
+        const shutdownButtonLabel = shutdownButton.textContent;
+
+        function setShutdownEnabled(enabled) {
+            shutdownButton.disabled = !enabled;
+            if (!enabled) {
+                shutdownButton.textContent = shutdownButtonLabel;
+            }
+        }
+
+        async function requestShutdown() {
+            const confirmed = window.confirm('Backend wirklich herunterfahren?');
+            if (!confirmed) {
+                return;
+            }
+
+            shutdownButton.disabled = true;
+            shutdownButton.textContent = '⏻ Wird beendet...';
+
+            try {
+                const response = await fetch('/shutdown', { method: 'POST' });
+                if (!response.ok) {
+                    throw new Error('Shutdown fehlgeschlagen');
+                }
+                document.getElementById('connectionStatus').textContent = '⏻ Backend wird beendet...';
+            } catch (error) {
+                shutdownButton.disabled = false;
+                shutdownButton.textContent = shutdownButtonLabel;
+                window.alert('Shutdown fehlgeschlagen. Bitte erneut versuchen.');
+                console.error('Shutdown Error:', error);
+            }
+        }
+
+        shutdownButton.addEventListener('click', requestShutdown);
+
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/live")
             .withAutomaticReconnect()
@@ -200,18 +264,22 @@
         connection.start()
             .then(() => {
                 document.getElementById('connectionStatus').textContent = '✓ Verbunden mit Backend';
+                setShutdownEnabled(true);
             })
             .catch(err => {
                 document.getElementById('connectionStatus').textContent = '✗ Verbindung fehlgeschlagen';
+                setShutdownEnabled(false);
                 console.error('SignalR Error:', err);
             });
 
         connection.onreconnecting(() => {
             document.getElementById('connectionStatus').textContent = '↻ Verbindung wird wiederhergestellt...';
+            setShutdownEnabled(false);
         });
 
         connection.onreconnected(() => {
             document.getElementById('connectionStatus').textContent = '✓ Verbunden mit Backend';
+            setShutdownEnabled(true);
         });
 
         function updateDisplay() {

@@ -90,6 +90,20 @@ internal static class BackendHost
             return Results.Text(sb.ToString(), "text/plain; charset=utf-8");
         });
 
+        app.MapPost("/shutdown", (IHostApplicationLifetime lifetime, ILoggerFactory loggerFactory) =>
+        {
+            var logger = loggerFactory.CreateLogger("Shutdown");
+            logger.LogWarning("Shutdown requested via /shutdown.");
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(150);
+                lifetime.StopApplication();
+            });
+
+            return Results.Ok(new { ok = true });
+        });
+
         app.MapHub<LiveHub>("/live");
 
         app.Run();
