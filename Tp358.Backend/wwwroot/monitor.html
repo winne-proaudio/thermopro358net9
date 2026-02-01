@@ -43,6 +43,20 @@
             flex-wrap: wrap;
         }
 
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
         .status-indicator {
             width: 12px;
             height: 12px;
@@ -146,11 +160,56 @@
             font-size: 1.2em;
         }
 
-        .footer {
-            text-align: center;
+        .view-btn {
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+            color: #374151;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, transform 0.15s;
+        }
+
+        .view-btn:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            transform: translateY(-1px);
+        }
+
+        .view-btn.active {
+            background: #111827;
+            border-color: #111827;
             color: white;
-            margin-top: 30px;
-            opacity: 0.8;
+        }
+
+        .view-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .time-btn {
+            padding: 8px 10px;
+            font-size: 0.95em;
+        }
+
+        .smooth-window {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 4px;
+        }
+
+        .smooth-label {
+            font-weight: 600;
+            color: #374151;
+            min-width: 52px;
+            text-align: center;
+        }
+
+        .smooth-adjust {
+            padding: 8px 10px;
+            min-width: 34px;
         }
 
         .shutdown-btn {
@@ -177,6 +236,55 @@
             box-shadow: none;
             transform: none;
         }
+
+        .graph-view {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #graphContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .graph-row {
+            background: white;
+            border-radius: 15px;
+            padding: 18px 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .graph-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        .graph-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.9em;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .graph-canvas {
+            width: 100%;
+            height: 200px;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -184,21 +292,42 @@
         <h1>🌡️ TP358 Backend Monitor</h1>
 
         <div class="status">
-            <div class="status-indicator"></div>
-            <span id="connectionStatus">Verbinde mit Backend...</span>
-            <button id="shutdownButton" class="shutdown-btn" type="button" disabled>
-                Backend herunterfahren
-            </button>
+            <div class="status-left">
+                <div class="status-indicator"></div>
+                <span id="connectionStatus">Verbinde mit Backend...</span>
+            </div>
+            <div class="status-actions">
+                <button id="homeViewButton" class="view-btn active" type="button">Home</button>
+                <button id="graphViewButton" class="view-btn" type="button">GRAPH</button>
+                <button class="view-btn time-btn active" type="button" data-hours="24">1 Tag</button>
+                <button class="view-btn time-btn" type="button" data-hours="48">2 Tage</button>
+                <button class="view-btn time-btn" type="button" data-hours="168">1 Woche</button>
+                <button class="view-btn smooth-btn active" type="button" data-smooth="A">A Median</button>
+                <button class="view-btn smooth-btn" type="button" data-smooth="B">B EMA</button>
+                <div class="smooth-window">
+                    <button id="smoothMinus" class="view-btn smooth-adjust" type="button">-</button>
+                    <span id="smoothMinutesLabel" class="smooth-label">2 min</span>
+                    <button id="smoothPlus" class="view-btn smooth-adjust" type="button">+</button>
+                </div>
+                <button id="shutdownButton" class="shutdown-btn" type="button" disabled>
+                    Backend herunterfahren
+                </button>
+            </div>
         </div>
 
-        <div id="sensorsContainer" class="sensors-grid"></div>
+        <div id="homeView">
+            <div id="sensorsContainer" class="sensors-grid"></div>
 
-        <div id="noData" class="no-data" style="display: none;">
-            Warte auf Sensordaten...
+            <div id="noData" class="no-data" style="display: none;">
+                Warte auf Sensordaten...
+            </div>
         </div>
 
-        <div class="footer">
-            TP358 Backend Monitor | Live-Daten via SignalR
+        <div id="graphView" class="graph-view" style="display: none;">
+            <div id="graphContainer"></div>
+            <div id="graphNoData" class="no-data" style="display: none;">
+                Keine Messwerte in der Datenbank gefunden.
+            </div>
         </div>
     </div>
 
@@ -214,6 +343,118 @@
 
         function getDeviceName(mac) {
             return deviceNames[mac] || "Unbekanntes Gerät";
+        }
+
+        const deviceOrder = Object.keys(deviceNames);
+        const deviceColors = ['#ef4444', '#3b82f6', '#10b981'];
+        const externalGraph = {
+            name: 'ESP32',
+            minTemp: 35,
+            maxTemp: 48,
+            delta: {
+                startThreshold: 38,
+                matchMinutes: 2
+            },
+            series: [
+                { deviceId: 'Steigleitung', label: 'Steigleitung', color: '#f97316' },
+                { deviceId: 'Rücklauf', label: 'Rücklauf', color: '#3b82f6' }
+            ]
+        };
+        const graphConfig = {
+            hours: 24,
+            minTemp: 10,
+            maxTemp: 30,
+            rowHeight: 200,
+            padding: { left: 46, right: 16, top: 14, bottom: 28 }
+        };
+
+        const homeViewButton = document.getElementById('homeViewButton');
+        const graphViewButton = document.getElementById('graphViewButton');
+        const timeButtons = Array.from(document.querySelectorAll('.time-btn'));
+        const smoothButtons = Array.from(document.querySelectorAll('.smooth-btn'));
+        const smoothMinus = document.getElementById('smoothMinus');
+        const smoothPlus = document.getElementById('smoothPlus');
+        const smoothMinutesLabel = document.getElementById('smoothMinutesLabel');
+        const homeView = document.getElementById('homeView');
+        const graphView = document.getElementById('graphView');
+        const graphContainer = document.getElementById('graphContainer');
+        const graphNoData = document.getElementById('graphNoData');
+
+        let currentView = 'home';
+        let graphRefreshTimer = null;
+        let latestGraphSeries = new Map();
+        let latestExternalSeries = new Map();
+        let smoothingMode = 'A';
+        let smoothingWindowMinutes = 2;
+
+        function setView(view) {
+            currentView = view;
+            const isHome = view === 'home';
+            homeView.style.display = isHome ? 'block' : 'none';
+            graphView.style.display = isHome ? 'none' : 'flex';
+            homeViewButton.classList.toggle('active', isHome);
+            graphViewButton.classList.toggle('active', !isHome);
+            timeButtons.forEach(btn => {
+                btn.disabled = isHome;
+            });
+            smoothButtons.forEach(btn => {
+                btn.disabled = isHome;
+            });
+            smoothMinus.disabled = isHome;
+            smoothPlus.disabled = isHome;
+
+            if (isHome) {
+                stopGraphRefresh();
+            } else {
+                loadGraphData();
+                startGraphRefresh();
+            }
+        }
+
+        homeViewButton.addEventListener('click', () => setView('home'));
+        graphViewButton.addEventListener('click', () => setView('graph'));
+        timeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const hours = Number.parseInt(button.dataset.hours ?? '24', 10);
+                setTimeRange(Number.isFinite(hours) ? hours : 24);
+            });
+        });
+        smoothButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.smooth ?? 'A';
+                setSmoothingMode(mode);
+            });
+        });
+        smoothMinus.addEventListener('click', () => setSmoothingMinutes(smoothingWindowMinutes - 1));
+        smoothPlus.addEventListener('click', () => setSmoothingMinutes(smoothingWindowMinutes + 1));
+
+        function setTimeRange(hours) {
+            graphConfig.hours = hours;
+            timeButtons.forEach(btn => {
+                btn.classList.toggle('active', Number.parseInt(btn.dataset.hours ?? '0', 10) === hours);
+            });
+            if (currentView === 'graph') {
+                loadGraphData();
+            }
+        }
+
+        function setSmoothingMode(mode) {
+            smoothingMode = ['A', 'B'].includes(mode) ? mode : 'A';
+            smoothButtons.forEach(btn => {
+                btn.classList.toggle('active', (btn.dataset.smooth ?? 'A') === smoothingMode);
+            });
+            if (currentView === 'graph') {
+                renderGraphs(latestGraphSeries, latestExternalSeries);
+            }
+        }
+
+        function setSmoothingMinutes(minutes) {
+            const next = Math.max(1, minutes);
+            smoothingWindowMinutes = next;
+            smoothMinutesLabel.textContent = `${next} min`;
+            if (currentView === 'graph') {
+                renderGraphs(latestGraphSeries, latestExternalSeries);
+            }
         }
 
         const shutdownButton = document.getElementById('shutdownButton');
@@ -250,6 +491,467 @@
         }
 
         shutdownButton.addEventListener('click', requestShutdown);
+
+        function startGraphRefresh() {
+            if (graphRefreshTimer) {
+                return;
+            }
+            graphRefreshTimer = setInterval(loadGraphData, 60000);
+        }
+
+        function stopGraphRefresh() {
+            if (!graphRefreshTimer) {
+                return;
+            }
+            clearInterval(graphRefreshTimer);
+            graphRefreshTimer = null;
+        }
+
+        async function loadGraphData() {
+            const sensorPromise = fetch(`/measurements/temperature?hours=${graphConfig.hours}`);
+            const externalPromise = fetch(`/measurements/external?hours=${graphConfig.hours}`);
+
+            const [sensorResult, externalResult] = await Promise.allSettled([sensorPromise, externalPromise]);
+
+            let grouped = new Map();
+            let externalSeries = new Map();
+            let hadError = false;
+
+            try {
+                if (sensorResult.status === 'fulfilled') {
+                    if (!sensorResult.value.ok) {
+                        throw new Error('Sensor-Messwerte konnten nicht geladen werden');
+                    }
+                    const measurements = await sensorResult.value.json();
+                    grouped = new Map();
+                    measurements.forEach(item => {
+                        if (!grouped.has(item.deviceMac)) {
+                            grouped.set(item.deviceMac, []);
+                        }
+                        if (item.temperatureC === null || item.temperatureC === undefined) {
+                            return;
+                        }
+                        grouped.get(item.deviceMac).push({
+                            time: new Date(item.measuredAt),
+                            temp: item.temperatureC
+                        });
+                    });
+                } else {
+                    throw sensorResult.reason;
+                }
+            } catch (error) {
+                hadError = true;
+                console.error('Graph Sensor Error:', error);
+            }
+
+            try {
+                if (externalResult.status === 'fulfilled') {
+                    if (!externalResult.value.ok) {
+                        throw new Error('Externe Messwerte konnten nicht geladen werden');
+                    }
+                    const measurements = await externalResult.value.json();
+                    externalSeries = new Map();
+                    measurements.forEach(item => {
+                        if (!item.deviceId) {
+                            return;
+                        }
+                        if (item.temperature === null || item.temperature === undefined) {
+                            return;
+                        }
+                        if (!externalSeries.has(item.deviceId)) {
+                            externalSeries.set(item.deviceId, []);
+                        }
+                        externalSeries.get(item.deviceId).push({
+                            time: new Date(item.timestamp),
+                            temp: item.temperature
+                        });
+                    });
+                } else {
+                    throw externalResult.reason;
+                }
+            } catch (error) {
+                hadError = true;
+                console.error('Graph External Error:', error);
+            }
+
+            latestGraphSeries = grouped;
+            latestExternalSeries = externalSeries;
+            renderGraphs(grouped, externalSeries, hadError);
+        }
+
+        function renderGraphs(seriesByDevice, externalSeries, hadError) {
+            graphContainer.innerHTML = '';
+            let hasData = false;
+            const timeRange = getTimeRange();
+
+            deviceOrder.forEach((mac, index) => {
+                const row = document.createElement('div');
+                row.className = 'graph-row';
+
+                const title = document.createElement('div');
+                title.className = 'graph-title';
+                title.textContent = `${getDeviceName(mac)} (${mac})`;
+
+                const canvas = document.createElement('canvas');
+                canvas.className = 'graph-canvas';
+
+                row.appendChild(title);
+                row.appendChild(canvas);
+                graphContainer.appendChild(row);
+
+                const points = (seriesByDevice.get(mac) || []).slice().sort((a, b) => a.time - b.time);
+                const smoothedPoints = applySmoothing(points);
+                if (points.length > 0) {
+                    hasData = true;
+                }
+                drawGraph(canvas, smoothedPoints, deviceColors[index % deviceColors.length], graphConfig.minTemp, graphConfig.maxTemp, timeRange);
+            });
+
+            const externalRow = document.createElement('div');
+            externalRow.className = 'graph-row';
+
+            const externalTitle = document.createElement('div');
+            externalTitle.className = 'graph-title';
+            externalTitle.textContent = externalGraph.name;
+
+            const externalLegend = document.createElement('div');
+            externalLegend.className = 'graph-legend';
+            externalGraph.series.forEach(item => {
+                const legendItem = document.createElement('div');
+                const dot = document.createElement('span');
+                dot.className = 'legend-dot';
+                dot.style.background = item.color;
+                legendItem.appendChild(dot);
+                legendItem.appendChild(document.createTextNode(item.label));
+                externalLegend.appendChild(legendItem);
+            });
+
+            const externalCanvas = document.createElement('canvas');
+            externalCanvas.className = 'graph-canvas';
+
+            externalRow.appendChild(externalTitle);
+            externalRow.appendChild(externalLegend);
+            externalRow.appendChild(externalCanvas);
+            graphContainer.appendChild(externalRow);
+
+            const externalSeriesList = externalGraph.series.map(item => {
+                const points = (externalSeries.get(item.deviceId) || []).slice().sort((a, b) => a.time - b.time);
+                const smoothedPoints = applySmoothing(points);
+                if (points.length > 0) {
+                    hasData = true;
+                }
+                return { label: item.label, color: item.color, points: smoothedPoints };
+            });
+            const deltaText = formatDeltaText(externalSeriesList, externalGraph.delta);
+            externalTitle.textContent = `${externalGraph.name} · ${deltaText}`;
+            drawGraphMulti(externalCanvas, externalSeriesList, externalGraph.minTemp, externalGraph.maxTemp, timeRange);
+
+            graphNoData.style.display = hasData ? 'none' : 'block';
+            graphNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
+        }
+
+        function getTimeRange() {
+            const to = new Date();
+            const from = new Date(to.getTime() - graphConfig.hours * 60 * 60 * 1000);
+            return { from, to, totalMs: to - from };
+        }
+
+        function drawGraph(canvas, points, color, minTemp, maxTemp, timeRange) {
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.clientWidth || 800;
+            const height = graphConfig.rowHeight;
+
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+            canvas.style.height = `${graphConfig.rowHeight}px`;
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, width, height);
+
+            const frame = drawGraphFrame(ctx, width, height, minTemp, maxTemp, timeRange);
+
+            if (points.length === 0) {
+                ctx.fillStyle = '#9ca3af';
+                ctx.fillText('Keine Daten', frame.left + 10, frame.top + 18);
+                return;
+            }
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            points.forEach((point, index) => {
+                const clampedTemp = Math.min(maxTemp, Math.max(minTemp, point.temp));
+                const x = frame.left + ((point.time - frame.from) / frame.totalMs) * frame.plotWidth;
+                const y = frame.top + ((maxTemp - clampedTemp) / frame.range) * frame.plotHeight;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+        }
+
+        function drawGraphMulti(canvas, seriesList, minTemp, maxTemp, timeRange) {
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.clientWidth || 800;
+            const height = graphConfig.rowHeight;
+
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+            canvas.style.height = `${graphConfig.rowHeight}px`;
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, width, height);
+
+            const frame = drawGraphFrame(ctx, width, height, minTemp, maxTemp, timeRange);
+
+            const hasData = seriesList.some(series => series.points.length > 0);
+            if (!hasData) {
+                ctx.fillStyle = '#9ca3af';
+                ctx.fillText('Keine Daten', frame.left + 10, frame.top + 18);
+                return;
+            }
+
+            seriesList.forEach(series => {
+                if (series.points.length === 0) {
+                    return;
+                }
+                ctx.strokeStyle = series.color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                series.points.forEach((point, index) => {
+                    const clampedTemp = Math.min(maxTemp, Math.max(minTemp, point.temp));
+                    const x = frame.left + ((point.time - frame.from) / frame.totalMs) * frame.plotWidth;
+                    const y = frame.top + ((maxTemp - clampedTemp) / frame.range) * frame.plotHeight;
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                ctx.stroke();
+            });
+        }
+
+        function drawGraphFrame(ctx, width, height, minTemp, maxTemp, timeRange) {
+            const { left, right, top, bottom } = graphConfig.padding;
+            const plotWidth = width - left - right;
+            const plotHeight = height - top - bottom;
+            const range = maxTemp - minTemp;
+
+            const from = timeRange.from;
+            const totalMs = timeRange.totalMs;
+
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = '#6b7280';
+
+            for (let t = minTemp; t <= maxTemp; t += 1) {
+                const y = top + ((maxTemp - t) / range) * plotHeight;
+                ctx.beginPath();
+                ctx.moveTo(left, y);
+                ctx.lineTo(left + plotWidth, y);
+                ctx.stroke();
+                ctx.fillText(t.toString(), 8, y + 3);
+            }
+
+            const dashedLines = [
+                { temp: 20, color: '#f59e0b' },
+                { temp: 23, color: '#10b981' }
+            ];
+
+            ctx.save();
+            ctx.setLineDash([1, 6]);
+            ctx.lineCap = 'round';
+            dashedLines.forEach(line => {
+                if (line.temp < minTemp || line.temp > maxTemp) {
+                    return;
+                }
+                const y = top + ((maxTemp - line.temp) / range) * plotHeight;
+                ctx.strokeStyle = line.color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(left, y);
+                ctx.lineTo(left + plotWidth, y);
+                ctx.stroke();
+            });
+            ctx.restore();
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+
+            const baseLabelEvery = Math.max(1, Math.round(graphConfig.hours / 12));
+            const labelEvery = width < 600 ? baseLabelEvery * 2 : baseLabelEvery;
+            for (let h = 0; h <= graphConfig.hours; h += 1) {
+                const x = left + (h / graphConfig.hours) * plotWidth;
+                ctx.beginPath();
+                ctx.moveTo(x, top);
+                ctx.lineTo(x, top + plotHeight);
+                ctx.stroke();
+
+                if (h % labelEvery === 0) {
+                    const tickTime = new Date(from.getTime() + h * 60 * 60 * 1000);
+                    const label = tickTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                    ctx.fillText(label, x - 14, top + plotHeight + 16);
+                }
+            }
+
+            ctx.strokeStyle = '#9ca3af';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(left, top);
+            ctx.lineTo(left, top + plotHeight);
+            ctx.lineTo(left + plotWidth, top + plotHeight);
+            ctx.stroke();
+
+            return { left, top, plotWidth, plotHeight, range, from, totalMs };
+        }
+
+        function formatDeltaText(seriesList, deltaConfig) {
+            const stats = computeDeltaStats(seriesList, deltaConfig);
+            if (!stats) {
+                return 'Delta T: n/a · Min: n/a · Max: n/a';
+            }
+            return `Delta T: ${stats.current.toFixed(1)} °C · Min: ${stats.min.toFixed(1)} °C · Max: ${stats.max.toFixed(1)} °C`;
+        }
+
+        function computeDeltaStats(seriesList, deltaConfig) {
+            const steig = seriesList.find(item => item.label === 'Steigleitung');
+            const rueck = seriesList.find(item => item.label === 'Rücklauf');
+            if (!steig || !rueck || steig.points.length === 0 || rueck.points.length === 0) {
+                return null;
+            }
+
+            const threshold = deltaConfig?.startThreshold ?? 38;
+            const matchMinutes = deltaConfig?.matchMinutes ?? 2;
+            const matchMs = matchMinutes * 60 * 1000;
+
+            const rueckPoints = rueck.points;
+            const steigPoints = steig.points;
+
+            const startIdx = rueckPoints.findIndex(point => point.temp > threshold);
+            if (startIdx === -1) {
+                return null;
+            }
+
+            let min = null;
+            let max = null;
+            let current = null;
+            let steigIndex = 0;
+
+            for (let i = startIdx; i < rueckPoints.length; i += 1) {
+                const rueckPoint = rueckPoints[i];
+                const rueckTime = rueckPoint.time.getTime();
+
+                while (steigIndex < steigPoints.length && steigPoints[steigIndex].time.getTime() < rueckTime - matchMs) {
+                    steigIndex += 1;
+                }
+
+                let best = null;
+                const candidates = [];
+                if (steigIndex < steigPoints.length) {
+                    candidates.push(steigPoints[steigIndex]);
+                }
+                if (steigIndex > 0) {
+                    candidates.push(steigPoints[steigIndex - 1]);
+                }
+
+                candidates.forEach(candidate => {
+                    const diff = Math.abs(candidate.time.getTime() - rueckTime);
+                    if (diff <= matchMs && (!best || diff < best.diff)) {
+                        best = { temp: candidate.temp, diff };
+                    }
+                });
+
+                if (!best) {
+                    continue;
+                }
+
+                const delta = best.temp - rueckPoint.temp;
+                if (min === null || delta < min) {
+                    min = delta;
+                }
+                if (max === null || delta > max) {
+                    max = delta;
+                }
+                current = delta;
+            }
+
+            if (current === null || min === null || max === null) {
+                return null;
+            }
+
+            return { current, min, max };
+        }
+
+        function applySmoothing(points) {
+            if (!points || points.length === 0) {
+                return points;
+            }
+
+            switch (smoothingMode) {
+                case 'A':
+                    return smoothMedian(points, smoothingWindowMinutes);
+                case 'B':
+                    return smoothEma(points, smoothingWindowMinutes);
+                default:
+                    return points;
+            }
+        }
+
+        function smoothMedian(points, windowMinutes) {
+            const windowMs = windowMinutes * 60 * 1000;
+            const result = [];
+            let start = 0;
+            let end = 0;
+
+            for (let i = 0; i < points.length; i += 1) {
+                const t = points[i].time.getTime();
+                while (start < points.length && points[start].time.getTime() < t - windowMs) {
+                    start += 1;
+                }
+                while (end < points.length && points[end].time.getTime() <= t + windowMs) {
+                    end += 1;
+                }
+
+                const windowValues = [];
+                for (let j = start; j < end; j += 1) {
+                    windowValues.push(points[j].temp);
+                }
+
+                windowValues.sort((a, b) => a - b);
+                const median = windowValues[Math.floor(windowValues.length / 2)];
+                result.push({ time: points[i].time, temp: median });
+            }
+
+            return result;
+        }
+
+        function smoothEma(points, windowMinutes) {
+            const windowMs = Math.max(1, windowMinutes * 60 * 1000);
+            const result = [];
+            let smoothed = points[0].temp;
+            result.push({ time: points[0].time, temp: smoothed });
+
+            for (let i = 1; i < points.length; i += 1) {
+                const dt = Math.max(1, points[i].time.getTime() - points[i - 1].time.getTime());
+                const alpha = 1 - Math.exp(-dt / windowMs);
+                smoothed = smoothed + alpha * (points[i].temp - smoothed);
+                result.push({ time: points[i].time, temp: smoothed });
+            }
+
+            return result;
+        }
+
+
+        window.addEventListener('resize', () => {
+            if (currentView === 'graph') {
+                renderGraphs(latestGraphSeries, latestExternalSeries);
+            }
+        });
 
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/live")
