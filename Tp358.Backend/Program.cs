@@ -19,10 +19,12 @@ internal static class BackendHost
 
         builder.Services.AddSingleton<IAdvertisementSource>(sp =>
         {
+#if WINDOWS
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 return ActivatorUtilities.CreateInstance<Tp358.Ble.Windows.WindowsAdvertisementSource>(sp);
             }
+#endif
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
@@ -35,53 +37,53 @@ internal static class BackendHost
         builder.Services.AddSingleton<ScannerWorker>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ScannerWorker>());
 
-            var app = builder.Build();
+        var app = builder.Build();
 
-            app.UseStaticFiles();
+        app.UseStaticFiles();
 
-            // Initialize database (optional)
-            var dbService = app.Services.GetRequiredService<DatabaseService>();
-            try
+        // Initialize database (optional)
+        var dbService = app.Services.GetRequiredService<DatabaseService>();
+        try
+        {
+            await dbService.InitializeDatabaseAsync();
+        }
+        catch (Exception ex)
+        {
+            var logger = app.Services.GetRequiredService<ILogger<DatabaseService>>();
+            logger.LogWarning(ex, "Datenbank konnte nicht initialisiert werden. Backend läuft ohne Datenbankanbindung weiter.");
+        }
+
+        app.MapGet("/", () =>
+            Results.Text("TP358 Backend läuft. Endpoints: /health, /live/data, /BackendMonitor, SignalR: /live", "text/plain; charset=utf-8"));
+
+        app.MapGet("/BackendMonitor", () => Results.Redirect("/monitor.html"));
+
+        app.MapGet("/health", () => Results.Ok(new { ok = true }));
+
+        app.MapGet("/live/data", (ScannerWorker worker) =>
+        {
+            var readings = worker.GetLatestReadings();
+            if (readings.Count == 0)
             {
-                await dbService.InitializeDatabaseAsync();
+                return Results.Text("Noch keine Sensordaten empfangen.\n", "text/plain; charset=utf-8");
             }
-            catch (Exception ex)
+
+            var sb = new System.Text.StringBuilder();
+            foreach (var (mac, data) in readings.OrderBy(x => x.Key))
             {
-                var logger = app.Services.GetRequiredService<ILogger<DatabaseService>>();
-                logger.LogWarning(ex, "Datenbank konnte nicht initialisiert werden. Backend läuft ohne Datenbankanbindung weiter.");
+                sb.AppendLine($"Sensor: {mac}");
+                sb.AppendLine($"  Temperatur: {data.TemperatureC?.ToString("F1") ?? "n/a"} °C");
+                sb.AppendLine($"  Luftfeuchtigkeit: {data.HumidityPercent?.ToString() ?? "n/a"} %");
+                sb.AppendLine($"  Batterie: {data.BatteryPercent?.ToString() ?? "n/a"} %");
+                sb.AppendLine($"  Signalstärke: {data.Rssi} dBm");
+                sb.AppendLine($"  Letzte Aktualisierung: {data.Timestamp:HH:mm:ss}");
+                sb.AppendLine();
             }
+            return Results.Text(sb.ToString(), "text/plain; charset=utf-8");
+        });
 
-            app.MapGet("/", () =>
-                Results.Text("TP358 Backend läuft. Endpoints: /health, /live/data, /BackendMonitor, SignalR: /live", "text/plain; charset=utf-8"));
+        app.MapHub<LiveHub>("/live");
 
-            app.MapGet("/BackendMonitor", () => Results.Redirect("/monitor.html"));
-
-            app.MapGet("/health", () => Results.Ok(new { ok = true }));
-
-            app.MapGet("/live/data", (ScannerWorker worker) =>
-            {
-                var readings = worker.GetLatestReadings();
-                if (readings.Count == 0)
-                {
-                    return Results.Text("Noch keine Sensordaten empfangen.\n", "text/plain; charset=utf-8");
-                }
-
-                var sb = new System.Text.StringBuilder();
-                foreach (var (mac, data) in readings.OrderBy(x => x.Key))
-                {
-                    sb.AppendLine($"Sensor: {mac}");
-                    sb.AppendLine($"  Temperatur: {data.TemperatureC?.ToString("F1") ?? "n/a"} °C");
-                    sb.AppendLine($"  Luftfeuchtigkeit: {data.HumidityPercent?.ToString() ?? "n/a"} %");
-                    sb.AppendLine($"  Batterie: {data.BatteryPercent?.ToString() ?? "n/a"} %");
-                    sb.AppendLine($"  Signalstärke: {data.Rssi} dBm");
-                    sb.AppendLine($"  Letzte Aktualisierung: {data.Timestamp:HH:mm:ss}");
-                    sb.AppendLine();
-                }
-                return Results.Text(sb.ToString(), "text/plain; charset=utf-8");
-            });
-
-            app.MapHub<LiveHub>("/live");
-
-            app.Run();
+        app.Run();
     }
 }

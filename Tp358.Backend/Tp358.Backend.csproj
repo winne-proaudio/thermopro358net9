@@ -1,16 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework Condition="'$(OS)' == 'Unix'">net9.0</TargetFramework>
+    <TargetFramework Condition="'$(OS)' == 'Windows_NT'">net9.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <EnableWindowsTargeting Condition="'$(TargetFramework)' == 'net9.0-windows10.0.19041.0'">true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Tp358.Core\Tp358.Core.csproj" />
     <ProjectReference Include="..\Tp358.Ble.Abstractions\Tp358.Ble.Abstractions.csproj" />
-    <ProjectReference Include="..\Tp358.Ble.Windows\Tp358.Ble.Windows.csproj" />
+    <ProjectReference Include="..\Tp358.Ble.Windows\Tp358.Ble.Windows.csproj" Condition="'$(TargetFramework)' == 'net9.0-windows10.0.19041.0'" />
   </ItemGroup>
 
   <ItemGroup>
