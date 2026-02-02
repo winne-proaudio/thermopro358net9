@@ -1,0 +1,389 @@
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status {
+            background: white;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            margin-left: 24px;
+        }
+
+        .status-actions button {
+            padding: 8px 12px;
+            font-size: 0.8em;
+            font-weight: normal;
+        }
+
+        .status-actions-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .status-actions-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            background: #9ca3af;
+        }
+
+        .status-indicator.is-ok {
+            background: #10b981;
+        }
+
+        .status-indicator.is-warn {
+            background: #f59e0b;
+        }
+
+        .status-indicator.is-error {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .sensor-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .sensor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .sensor-name {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .sensor-mac {
+            font-size: 0.8em;
+            color: #9ca3af;
+            font-family: 'Courier New', monospace;
+            margin-top: 2px;
+        }
+
+        .sensor-time {
+            font-size: 0.85em;
+            color: #6b7280;
+        }
+
+        .sensor-data {
+            display: grid;
+            gap: 15px;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .data-label {
+            font-weight: 500;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .data-value {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .temp { color: #ef4444; }
+        .humidity { color: #3b82f6; }
+        .battery { color: #10b981; }
+        .signal { color: #f59e0b; }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .view-btn {
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+            color: #374151;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, transform 0.15s;
+        }
+
+        .view-btn:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            transform: translateY(-1px);
+        }
+
+        .view-btn.active {
+            background: #111827;
+            border-color: #111827;
+            color: white;
+        }
+
+        .view-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .time-btn {
+            padding: 8px 12px;
+        }
+
+        .status-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .flow-controls {
+            margin-bottom: 12px;
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .control-right {
+            justify-content: flex-end;
+        }
+
+        .graph-controls .control-right {
+            margin-left: 12px;
+        }
+
+        .flow-controls .control-right {
+            margin-left: auto;
+        }
+
+        .smooth-window {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 4px;
+        }
+
+        .smooth-label {
+            font-weight: 600;
+            color: #374151;
+            min-width: 52px;
+            text-align: center;
+        }
+
+        .smooth-adjust {
+            padding: 8px 12px;
+            min-width: 34px;
+        }
+
+        .shutdown-btn {
+            border: none;
+            border-radius: 8px;
+            background: #ef4444;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.35);
+        }
+
+        .shutdown-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(239, 68, 68, 0.4);
+        }
+
+        .shutdown-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .graph-view {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #graphContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .graph-row {
+            background: white;
+            border-radius: 15px;
+            padding: 14px 18px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .graph-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95em;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .graph-title-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .graph-title-left {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .graph-title-center {
+            flex: 1;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .graph-title-latest {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .graph-title--sensor .graph-title-center {
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #6b7280;
+        }
+
+        .graph-title--sensor .graph-title-latest {
+            font-size: 0.95em;
+            font-weight: 700;
+        }
+
+        .latest-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .graph-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.8em;
+            color: #6b7280;
+            margin-bottom: 6px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .graph-canvas {
+            width: 100%;
+            height: 200px;
+            display: block;
+        }
+    

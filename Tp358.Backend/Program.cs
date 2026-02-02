@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using Tp358.Ble.Abstractions;
@@ -67,6 +69,21 @@ internal static class BackendHost
         app.MapGet("/BackendMonitor", () => Results.Redirect("/monitor.html"));
 
         app.MapGet("/health", () => Results.Ok(new { ok = true }));
+        app.MapGet("/config/devices", (IConfiguration config) =>
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var child in config.GetSection("DeviceNames").GetChildren())
+            {
+                var mac = child["Mac"] ?? child["mac"];
+                var name = child["Name"] ?? child["name"];
+                if (string.IsNullOrWhiteSpace(mac) || string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+                map[mac.Trim()] = name.Trim();
+            }
+            return Results.Ok(map);
+        });
 
         app.MapGet("/live/data", (ScannerWorker worker) =>
         {

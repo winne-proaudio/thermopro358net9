@@ -22,7 +22,7 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource
         }
 
         var adapter = connection.CreateProxy<IAdapter1>("org.bluez", adapterPath.Value);
-        await adapter.StartDiscoveryAsync();
+        await TryResetDiscoveryAsync(adapter, ct);
 
         ct.Register(() =>
         {
@@ -70,6 +70,30 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource
             yield return frame;
         }
     }
+
+    private static async Task TryResetDiscoveryAsync(IAdapter1 adapter, CancellationToken ct)
+    {
+        try
+        {
+            await adapter.StopDiscoveryAsync();
+        }
+        catch
+        {
+            // ignore stop errors (not discovering or adapter busy)
+        }
+
+        try
+        {
+            await adapter.StartDiscoveryAsync();
+        }
+        catch (DBusException ex) when (IsInProgress(ex))
+        {
+            // Discovery already running; treat as success.
+        }
+    }
+
+    private static bool IsInProgress(DBusException ex)
+        => string.Equals(ex.ErrorName, "org.bluez.Error.InProgress", StringComparison.OrdinalIgnoreCase);
 
     private static ObjectPath? FindAdapterPath(IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> managedObjects)
     {
