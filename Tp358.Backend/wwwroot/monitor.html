@@ -14,6 +14,7 @@
             <div class="status-left">
                 <div class="status-indicator"></div>
                 <span id="connectionStatus">Backend</span>
+                <span id="bleAdapterStatus" class="status-adapter">BLE: n/a</span>
             </div>
             <div class="status-actions">
                 <div class="status-actions-left">
@@ -21,23 +22,6 @@
                     <button id="graphViewButton" class="view-btn" type="button">GRAPH</button>
                     <button id="flowViewButton" class="view-btn" type="button">Vor-Rücklauf</button>
                     <button id="monitorViewButton" class="view-btn" type="button">Monitor</button>
-                    <div id="graphControls" class="status-controls graph-controls">
-                        <div class="control-group control-left">
-                            <button class="view-btn time-btn" type="button" data-hours="12">12h</button>
-                            <button class="view-btn time-btn active" type="button" data-hours="24">1 Tag</button>
-                            <button class="view-btn time-btn" type="button" data-hours="48">2 Tage</button>
-                        <button class="view-btn time-btn" type="button" data-hours="168">1 Woche</button>
-                    </div>
-                        <div class="control-group control-right">
-                            <button class="view-btn smooth-btn active" type="button" data-smooth="A">A Median</button>
-                            <button class="view-btn smooth-btn" type="button" data-smooth="B">B EMA</button>
-                            <div class="smooth-window">
-                                <button id="smoothMinus" class="view-btn smooth-adjust" type="button">-</button>
-                                <span id="smoothMinutesLabel" class="smooth-label">2 min</span>
-                                <button id="smoothPlus" class="view-btn smooth-adjust" type="button">+</button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 <div class="status-actions-right">
                     <button id="shutdownButton" class="shutdown-btn" type="button" disabled>
@@ -56,6 +40,23 @@
         </div>
 
         <div id="graphView" class="graph-view" style="display: none;">
+            <div id="graphControls" class="status-controls flow-controls graph-controls">
+                <div class="control-group control-left">
+                    <button class="view-btn time-btn" type="button" data-hours="12">12h</button>
+                    <button class="view-btn time-btn active" type="button" data-hours="24">1 Tag</button>
+                    <button class="view-btn time-btn" type="button" data-hours="48">2 Tage</button>
+                    <button class="view-btn time-btn" type="button" data-hours="168">1 Woche</button>
+                </div>
+                <div class="control-group control-right">
+                    <button class="view-btn smooth-btn active" type="button" data-smooth="A">A Median</button>
+                    <button class="view-btn smooth-btn" type="button" data-smooth="B">B EMA</button>
+                    <div class="smooth-window">
+                        <button id="smoothMinus" class="view-btn smooth-adjust" type="button">-</button>
+                        <span id="smoothMinutesLabel" class="smooth-label">2 min</span>
+                        <button id="smoothPlus" class="view-btn smooth-adjust" type="button">+</button>
+                    </div>
+                </div>
+            </div>
             <div id="graphContainer"></div>
             <div id="graphNoData" class="no-data" style="display: none;">
                 Keine Messwerte in der Datenbank gefunden.

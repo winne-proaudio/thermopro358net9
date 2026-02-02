@@ -40,6 +40,19 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            min-width: 240px;
+        }
+
+        .status-adapter {
+            font-size: 0.85em;
+            color: #6b7280;
+            padding-left: 6px;
+            border-left: 1px solid #e5e7eb;
+            display: inline-block;
+            width: 220px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .status-actions {

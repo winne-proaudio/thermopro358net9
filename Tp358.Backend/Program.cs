@@ -36,7 +36,10 @@ internal static class BackendHost
                     return ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
                 }
 
-                var primary = ActivatorUtilities.CreateInstance<Tp358.Ble.BlueZ.BlueZAdvertisementSource>(sp);
+                var config = sp.GetRequiredService<IConfiguration>();
+                var (preferredId, preferredAddress) = ResolveBleAdapterConfig(config);
+
+                var primary = new Tp358.Ble.BlueZ.BlueZAdvertisementSource(preferredId, preferredAddress);
                 var fallback = ActivatorUtilities.CreateInstance<FakeAdvertisementSource>(sp);
                 return ActivatorUtilities.CreateInstance<FallbackAdvertisementSource>(sp, primary, fallback);
             }
@@ -69,6 +72,14 @@ internal static class BackendHost
         app.MapGet("/BackendMonitor", () => Results.Redirect("/monitor.html"));
 
         app.MapGet("/health", () => Results.Ok(new { ok = true }));
+        app.MapGet("/status/ble", (IAdvertisementSource source) =>
+        {
+            var resolvedSource = source is FallbackAdvertisementSource fallbackSource ? fallbackSource.Primary : source;
+            var adapterInfo = resolvedSource as IBleAdapterInfo;
+            var adapterLabel = BuildAdapterLabel(adapterInfo);
+
+            return Results.Ok(new { adapter = adapterLabel });
+        });
         app.MapGet("/config/devices", (IConfiguration config) =>
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -166,5 +177,61 @@ internal static class BackendHost
         app.MapHub<LiveHub>("/live");
 
         app.Run();
+    }
+
+    private static string? BuildAdapterLabel(IBleAdapterInfo? adapterInfo)
+    {
+        if (adapterInfo is null)
+        {
+            return null;
+        }
+
+        var name = adapterInfo.AdapterName;
+        var id = adapterInfo.AdapterId;
+        string? label = null;
+        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(id))
+        {
+            label = $"{name} ({id})";
+        }
+        else if (!string.IsNullOrWhiteSpace(name))
+        {
+            label = name;
+        }
+        else if (!string.IsNullOrWhiteSpace(id))
+        {
+            label = id;
+        }
+
+        return label;
+    }
+
+    private static (string? AdapterId, string? AdapterAddress) ResolveBleAdapterConfig(IConfiguration config)
+    {
+        var host = Environment.MachineName;
+        var hostSection = config.GetSection("Ble:Hosts");
+        if (hostSection.Exists())
+        {
+            foreach (var child in hostSection.GetChildren())
+            {
+                if (!string.Equals(child.Key, host, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var id = child["AdapterId"];
+                var address = child["AdapterAddress"];
+                return (
+                    string.IsNullOrWhiteSpace(id) ? null : id,
+                    string.IsNullOrWhiteSpace(address) ? null : address
+                );
+            }
+        }
+
+        var fallbackId = config["Ble:AdapterId"];
+        var fallbackAddress = config["Ble:AdapterAddress"];
+        return (
+            string.IsNullOrWhiteSpace(fallbackId) ? null : fallbackId,
+            string.IsNullOrWhiteSpace(fallbackAddress) ? null : fallbackAddress
+        );
     }
 }

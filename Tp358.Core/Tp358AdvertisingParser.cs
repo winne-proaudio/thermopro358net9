@@ -40,10 +40,13 @@ public static class Tp358AdvertisingParser
         // Log for debugging
         System.Console.WriteLine($"[TP358 Parser] CompanyId=0x{companyId:X4}, TempByte=0x{tempByte:X2}={tempByte} → {temperatureC}°C, HumidityByte=0x{d[1]:X2}={d[1]} → {humidityPercent}%");
 
+        int? battery = TryDecodeBatteryStatusTp358(d);
+
         return new Tp358Reading
         {
             TemperatureC = temperatureC,
-            HumidityPercent = humidityPercent
+            HumidityPercent = humidityPercent,
+            BatteryPercent = battery
         };
     }
 
@@ -89,6 +92,32 @@ public static class Tp358AdvertisingParser
         if (status == 0xFF)
         {
             return 255;
+        }
+
+        return null;
+    }
+
+    private static int? TryDecodeBatteryStatusTp358(ReadOnlySpan<byte> d)
+    {
+        if (d.Length < 3)
+        {
+            return null;
+        }
+
+        // Heuristic: older TP358 seems to expose only a low/ok flag in byte[2].
+        // Observed: 0x02 -> OK, 0x00 -> LOW.
+        var status = d[2];
+        if ((status & 0x02) != 0)
+        {
+            return 100;
+        }
+        if (status == 0x01)
+        {
+            return 50;
+        }
+        if (status == 0x00)
+        {
+            return 0;
         }
 
         return null;

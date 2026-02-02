@@ -9,6 +9,9 @@ public sealed class FallbackAdvertisementSource(
     ILogger<FallbackAdvertisementSource> logger
 ) : IAdvertisementSource
 {
+    public IAdvertisementSource Primary { get; } = primary;
+    public IAdvertisementSource Fallback { get; } = fallback;
+
     public async IAsyncEnumerable<AdvertisementFrame> WatchAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         var channel = System.Threading.Channels.Channel.CreateUnbounded<AdvertisementFrame>();

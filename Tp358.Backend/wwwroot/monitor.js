@@ -65,6 +65,7 @@ const sensors = new Map();
 
         const statusIndicator = document.querySelector('.status-indicator');
         const connectionStatus = document.getElementById('connectionStatus');
+        const bleAdapterStatus = document.getElementById('bleAdapterStatus');
 
         function setConnectionState(state, message) {
             statusIndicator.classList.remove('is-ok', 'is-warn', 'is-error');
@@ -85,6 +86,27 @@ const sensors = new Map();
         }
 
         setConnectionState('warn', 'Verbinde mit Backend...');
+        if (bleAdapterStatus) {
+            bleAdapterStatus.style.display = 'inline-flex';
+        }
+
+        async function loadBleAdapterStatus() {
+            if (!bleAdapterStatus) {
+                return;
+            }
+            try {
+                const response = await fetch('/status/ble');
+                if (!response.ok) {
+                    throw new Error('BLE-Status konnte nicht geladen werden');
+                }
+                const data = await response.json();
+                const adapter = data.adapter || 'n/a';
+                bleAdapterStatus.textContent = `BLE: ${adapter}`;
+            } catch (error) {
+                bleAdapterStatus.textContent = 'BLE: n/a';
+                console.warn('BLE-Status konnte nicht geladen werden:', error);
+            }
+        }
 
         const homeViewButton = document.getElementById('homeViewButton');
         const graphViewButton = document.getElementById('graphViewButton');
@@ -166,7 +188,6 @@ const sensors = new Map();
             });
             flowSmoothMinus.disabled = !isFlow;
             flowSmoothPlus.disabled = !isFlow;
-
             if (isHome) {
                 stopGraphRefresh();
             } else {
@@ -1123,6 +1144,7 @@ const sensors = new Map();
             .then(() => {
                 setConnectionState('ok', 'Verbunden mit Backend');
                 setShutdownEnabled(true);
+                loadBleAdapterStatus();
             })
             .catch(err => {
                 setConnectionState('error', 'Verbindung fehlgeschlagen');
@@ -1138,6 +1160,7 @@ const sensors = new Map();
         connection.onreconnected(() => {
             setConnectionState('ok', 'Verbunden mit Backend');
             setShutdownEnabled(true);
+            loadBleAdapterStatus();
         });
 
         function updateDisplay() {
@@ -1162,7 +1185,7 @@ const sensors = new Map();
                 const time = new Date(data.timestamp).toLocaleTimeString('de-DE');
                 const temp = data.temperatureC?.toFixed(1) ?? 'n/a';
                 const humidity = data.humidityPercent ?? 'n/a';
-                const battery = data.batteryPercent ?? 'n/a';
+                const battery = formatBattery(data);
                 const rssi = data.rssi;
                 const deviceName = getDeviceName(mac);
 
@@ -1194,7 +1217,7 @@ const sensors = new Map();
                                 <span class="icon">🔋</span>
                                 Batterie
                             </div>
-                            <div class="data-value battery">${battery} %</div>
+                            <div class="data-value battery">${battery}</div>
                         </div>
                         <div class="data-item">
                             <div class="data-label">
@@ -1208,4 +1231,25 @@ const sensors = new Map();
 
                 container.appendChild(card);
             });
+        }
+
+        function formatBattery(data) {
+            const batteryPercent = data.batteryPercent;
+            if (batteryPercent === null || batteryPercent === undefined) {
+                return 'n/a';
+            }
+
+            const rawPayload = data.rawPayloadHex ?? '';
+            const isTp358 = rawPayload.split('-').length === 4;
+            if (isTp358) {
+                if (batteryPercent === 100) {
+                    return 'OK';
+                }
+                if (batteryPercent === 0) {
+                    return 'LOW';
+                }
+                return `${batteryPercent} %`;
+            }
+
+            return `${batteryPercent} %`;
         }

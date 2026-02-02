@@ -4,8 +4,21 @@ using Tmds.DBus;
 
 namespace Tp358.Ble.BlueZ;
 
-public sealed class BlueZAdvertisementSource : IAdvertisementSource
+public sealed class BlueZAdvertisementSource : IAdvertisementSource, IBleAdapterInfo
 {
+    private readonly string? _preferredAdapterId;
+    private readonly string? _preferredAdapterAddress;
+
+    public string? AdapterId { get; private set; }
+    public string? AdapterAddress { get; private set; }
+    public string? AdapterName { get; private set; }
+
+    public BlueZAdvertisementSource(string? preferredAdapterId = null, string? preferredAdapterAddress = null)
+    {
+        _preferredAdapterId = NormalizeAdapterId(preferredAdapterId);
+        _preferredAdapterAddress = NormalizeAdapterAddress(preferredAdapterAddress);
+    }
+
     public async IAsyncEnumerable<AdvertisementFrame> WatchAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         var channel = Channel.CreateUnbounded<AdvertisementFrame>();
@@ -15,11 +28,13 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource
         var objectManager = connection.CreateProxy<IObjectManager>("org.bluez", "/");
         var initialObjects = await objectManager.GetManagedObjectsAsync();
 
-        var adapterPath = FindAdapterPath(initialObjects);
+        var adapterPath = FindAdapterPath(initialObjects, _preferredAdapterId, _preferredAdapterAddress);
         if (adapterPath == null)
         {
             throw new InvalidOperationException("No Bluetooth adapter found.");
         }
+
+        SetAdapterInfo(adapterPath.Value, initialObjects);
 
         var adapter = connection.CreateProxy<IAdapter1>("org.bluez", adapterPath.Value);
         await TryResetDiscoveryAsync(adapter, ct);
@@ -71,6 +86,30 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource
         }
     }
 
+    private void SetAdapterInfo(ObjectPath adapterPath, IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> managedObjects)
+    {
+        var path = adapterPath.ToString();
+        AdapterId = path.Split('/').LastOrDefault();
+
+        if (managedObjects.TryGetValue(adapterPath, out var interfaces)
+            && interfaces.TryGetValue("org.bluez.Adapter1", out var props))
+        {
+            if (props.TryGetValue("Alias", out var aliasObj) && aliasObj is string alias && !string.IsNullOrWhiteSpace(alias))
+            {
+                AdapterName = alias;
+            }
+            else if (props.TryGetValue("Name", out var nameObj) && nameObj is string name && !string.IsNullOrWhiteSpace(name))
+            {
+                AdapterName = name;
+            }
+
+            if (props.TryGetValue("Address", out var addressObj) && addressObj is string address && !string.IsNullOrWhiteSpace(address))
+            {
+                AdapterAddress = address;
+            }
+        }
+    }
+
     private static async Task TryResetDiscoveryAsync(IAdapter1 adapter, CancellationToken ct)
     {
         try
@@ -95,18 +134,54 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource
     private static bool IsInProgress(DBusException ex)
         => string.Equals(ex.ErrorName, "org.bluez.Error.InProgress", StringComparison.OrdinalIgnoreCase);
 
-    private static ObjectPath? FindAdapterPath(IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> managedObjects)
+    private static ObjectPath? FindAdapterPath(
+        IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> managedObjects,
+        string? preferredAdapterId,
+        string? preferredAdapterAddress)
     {
+        ObjectPath? firstAdapter = null;
+        ObjectPath? addressMatch = null;
+
         foreach (var (path, interfaces) in managedObjects)
         {
             if (interfaces.ContainsKey("org.bluez.Adapter1"))
             {
-                return path;
+                if (firstAdapter is null)
+                {
+                    firstAdapter = path;
+                }
+
+                if (!string.IsNullOrWhiteSpace(preferredAdapterId))
+                {
+                    var pathString = path.ToString();
+                    var id = pathString.Split('/').LastOrDefault();
+                    if (string.Equals(id, preferredAdapterId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(pathString, preferredAdapterId, StringComparison.OrdinalIgnoreCase)
+                        || pathString.EndsWith("/" + preferredAdapterId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return path;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(preferredAdapterAddress)
+                    && interfaces.TryGetValue("org.bluez.Adapter1", out var props)
+                    && props.TryGetValue("Address", out var addressObj)
+                    && addressObj is string address
+                    && string.Equals(address.Trim(), preferredAdapterAddress, StringComparison.OrdinalIgnoreCase))
+                {
+                    addressMatch = path;
+                }
             }
         }
 
-        return null;
+        return addressMatch ?? firstAdapter;
     }
+
+    private static string? NormalizeAdapterId(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeAdapterAddress(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
 
     private static void TryEmitFrame(IDictionary<string, object> props, Channel<AdvertisementFrame> channel, CancellationToken ct)
     {

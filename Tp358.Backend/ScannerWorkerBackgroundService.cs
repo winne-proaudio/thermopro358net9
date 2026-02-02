@@ -90,6 +90,12 @@ public sealed class ScannerWorker(
                 RawPayloadHex: BitConverter.ToString(frame.ManufacturerPayload)
             );
 
+            if (frame.ManufacturerPayload.Length == 4)
+            {
+                logger.LogInformation("TP358 4B RAW: MAC={Mac} CompanyId=0x{CompanyId:X4} Payload={Payload}",
+                    frame.DeviceMac, frame.CompanyId, dto.RawPayloadHex);
+            }
+
             string deviceType = frame.ManufacturerPayload.Length == 5 ? "TP358S" : "TP358";
             logger.LogInformation("[{Type}] Daten gesendet via SignalR: {Mac} | Temp={Temp}°C, Humidity={Hum}%, Battery={Bat}%",
                 deviceType, dto.DeviceMac, dto.TemperatureC, dto.HumidityPercent, dto.BatteryPercent);
