@@ -124,6 +124,7 @@ const sensors = new Map();
         const flowSmoothMinus = document.getElementById('flowSmoothMinus');
         const flowSmoothPlus = document.getElementById('flowSmoothPlus');
         const flowSmoothMinutesLabel = document.getElementById('flowSmoothMinutesLabel');
+        const flowEnergyStartInput = document.getElementById('flowEnergyStart');
         const homeView = document.getElementById('homeView');
         const graphView = document.getElementById('graphView');
         const flowView = document.getElementById('flowView');
@@ -148,6 +149,7 @@ const sensors = new Map();
         let flowSmoothingMode = 'A';
         let flowSmoothingWindowMinutes = 2;
         let flowHours = 24;
+        let flowEnergyStart = null;
         let currentGraphRefreshIntervalMs = graphRefreshIntervalMs;
         let monitorWindowMinutes = monitorGraph.windowMinutes;
         const monitorStepMinutes = 5;
@@ -228,9 +230,19 @@ const sensors = new Map();
         });
         flowSmoothMinus.addEventListener('click', () => setFlowSmoothingMinutes(flowSmoothingWindowMinutes - 1));
         flowSmoothPlus.addEventListener('click', () => setFlowSmoothingMinutes(flowSmoothingWindowMinutes + 1));
+        if (flowEnergyStartInput) {
+            flowEnergyStartInput.addEventListener('change', () => {
+                setFlowEnergyStart(parseDateTimeLocal(flowEnergyStartInput.value));
+            });
+        }
         monitorMinutesMinus.addEventListener('click', () => setMonitorWindowMinutes(monitorWindowMinutes - monitorStepMinutes));
         monitorMinutesPlus.addEventListener('click', () => setMonitorWindowMinutes(monitorWindowMinutes + monitorStepMinutes));
         monitorSmoothToggle.addEventListener('click', () => toggleMonitorSmoothing());
+
+        function initializeFlowEnergyStart() {
+            const defaultStart = getDefaultFlowEnergyStart();
+            setFlowEnergyStart(defaultStart, true);
+        }
 
         function setTimeRange(hours) {
             graphConfig.hours = hours;
@@ -290,6 +302,39 @@ const sensors = new Map();
             }
         }
 
+        function setFlowEnergyStart(date, skipReload) {
+            if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                flowEnergyStart = null;
+                if (flowEnergyStartInput) {
+                    flowEnergyStartInput.value = '';
+                }
+                if (!skipReload && currentView === 'flow') {
+                    renderFlowGraph(latestExternalSeries, lastExternalError);
+                }
+                return;
+            }
+
+            flowEnergyStart = date;
+            if (flowEnergyStartInput) {
+                flowEnergyStartInput.value = formatDateTimeLocal(flowEnergyStart);
+            }
+            if (!skipReload && currentView === 'flow') {
+                loadGraphData();
+            }
+        }
+
+        function getFlowEnergyHours() {
+            if (!flowEnergyStart) {
+                return 0;
+            }
+            const now = new Date();
+            const diffMs = now.getTime() - flowEnergyStart.getTime();
+            if (!Number.isFinite(diffMs) || diffMs <= 0) {
+                return 0;
+            }
+            return Math.max(1, Math.ceil(diffMs / (60 * 60 * 1000)));
+        }
+
         function setMonitorWindowMinutes(minutes) {
             const clamped = Math.min(120, Math.max(10, minutes));
             monitorWindowMinutes = clamped;
@@ -313,6 +358,7 @@ const sensors = new Map();
         }
 
         updateMonitorSmoothingUi();
+        initializeFlowEnergyStart();
         loadDeviceNames();
 
         const shutdownButton = document.getElementById('shutdownButton');
@@ -369,7 +415,13 @@ const sensors = new Map();
 
         async function loadGraphData() {
             const sensorPromise = fetch(`/measurements/temperature?hours=${graphConfig.hours}`);
-            const externalHours = currentView === 'flow' ? flowHours : graphConfig.hours;
+            let externalHours = currentView === 'flow' ? flowHours : graphConfig.hours;
+            if (currentView === 'flow') {
+                const energyHours = getFlowEnergyHours();
+                if (Number.isFinite(energyHours) && energyHours > externalHours) {
+                    externalHours = energyHours;
+                }
+            }
             const externalPromise = fetch(`/measurements/external?hours=${externalHours}`);
             const [sensorResult, externalResult] = await Promise.allSettled([sensorPromise, externalPromise]);
 
@@ -577,6 +629,9 @@ const sensors = new Map();
             const titleCenter = document.createElement('div');
             titleCenter.className = 'graph-title-center';
 
+            const titleEnergy = document.createElement('div');
+            titleEnergy.className = 'graph-title-energy';
+
             const titleLatest = document.createElement('div');
             titleLatest.className = 'graph-title-latest';
 
@@ -611,12 +666,15 @@ const sensors = new Map();
             });
 
             const latestText = formatLatestTemps(seriesList);
-            const deltaText = formatDeltaText(seriesList, externalGraph.delta);
+            const deltaText = formatDeltaText(seriesList, { ...externalGraph.delta, requireThreshold: false });
+            const heatText = formatHeatEnergyText(seriesList);
             titleLeft.textContent = flowGraph.name;
             titleCenter.textContent = deltaText;
+            titleEnergy.textContent = heatText;
             titleLatest.innerHTML = latestText;
             title.appendChild(titleLeft);
             title.appendChild(titleCenter);
+            title.appendChild(titleEnergy);
             title.appendChild(titleLatest);
 
             drawGraphMulti(canvas, seriesList, flowGraph.minTemp, flowGraph.maxTemp, timeRange, flowGraph.rowHeight);
@@ -961,6 +1019,17 @@ const sensors = new Map();
             }).join('');
         }
 
+        function formatHeatEnergyText(seriesList) {
+            if (!flowEnergyStart) {
+                return 'Wärmemenge: n/a';
+            }
+            const energyKwh = computeHeatEnergyKwh(seriesList, flowEnergyStart, externalGraph.delta, flowGraph.heatEnergy);
+            if (energyKwh === null) {
+                return 'Wärmemenge: n/a';
+            }
+            return `Wärmemenge: ${energyKwh.toFixed(1)} kWh`;
+        }
+
         function computeDeltaStats(seriesList, deltaConfig) {
             const steig = seriesList.find(item => item.label === 'Steigleitung');
             const rueck = seriesList.find(item => item.label === 'Rücklauf');
@@ -1031,6 +1100,152 @@ const sensors = new Map();
             }
 
             return { current, min, max };
+        }
+
+        function computeHeatEnergyKwh(seriesList, startDate, deltaConfig, heatConfig) {
+            const steig = seriesList.find(item => item.label === 'Steigleitung');
+            const rueck = seriesList.find(item => item.label === 'Rücklauf');
+            if (!steig || !rueck || steig.points.length === 0 || rueck.points.length === 0) {
+                return null;
+            }
+            if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
+                return null;
+            }
+
+            const steigPoints = steig.points.slice().sort((a, b) => a.time - b.time);
+            const rueckPoints = rueck.points.slice().sort((a, b) => a.time - b.time);
+            const deltaSeries = computeDeltaSeries(steigPoints, rueckPoints, deltaConfig);
+            if (!deltaSeries || deltaSeries.length === 0) {
+                return null;
+            }
+
+            const filtered = trimDeltaSeriesFromStart(deltaSeries, startDate);
+            if (!filtered || filtered.length < 2) {
+                return null;
+            }
+
+            const flowRate = heatConfig?.flowRateLitersPerMinute ?? 1;
+            const density = heatConfig?.densityKgPerLiter ?? 1;
+            const cp = heatConfig?.specificHeatKJPerKgK ?? 4.186;
+            if (![flowRate, density, cp].every(value => Number.isFinite(value) && value > 0)) {
+                return null;
+            }
+
+            let energyKwh = 0;
+            for (let i = 1; i < filtered.length; i += 1) {
+                const prev = filtered[i - 1];
+                const curr = filtered[i];
+                const dtMinutes = (curr.time.getTime() - prev.time.getTime()) / 60000;
+                if (!Number.isFinite(dtMinutes) || dtMinutes <= 0) {
+                    continue;
+                }
+                const avgDelta = (prev.delta + curr.delta) / 2;
+                energyKwh += avgDelta * dtMinutes * flowRate * density * cp / 3600;
+            }
+
+            return Number.isFinite(energyKwh) ? energyKwh : null;
+        }
+
+        function computeDeltaSeries(steigPoints, rueckPoints, deltaConfig) {
+            if (!steigPoints.length || !rueckPoints.length) {
+                return [];
+            }
+            const matchMinutes = deltaConfig?.matchMinutes ?? 2;
+            const matchMs = matchMinutes * 60 * 1000;
+            const series = [];
+            let steigIndex = 0;
+
+            for (let i = 0; i < rueckPoints.length; i += 1) {
+                const rueckPoint = rueckPoints[i];
+                const rueckTime = rueckPoint.time.getTime();
+
+                while (steigIndex < steigPoints.length && steigPoints[steigIndex].time.getTime() < rueckTime - matchMs) {
+                    steigIndex += 1;
+                }
+
+                let best = null;
+                const candidates = [];
+                if (steigIndex < steigPoints.length) {
+                    candidates.push(steigPoints[steigIndex]);
+                }
+                if (steigIndex > 0) {
+                    candidates.push(steigPoints[steigIndex - 1]);
+                }
+
+                candidates.forEach(candidate => {
+                    const diff = Math.abs(candidate.time.getTime() - rueckTime);
+                    if (diff <= matchMs && (!best || diff < best.diff)) {
+                        best = { temp: candidate.temp, diff };
+                    }
+                });
+
+                if (!best) {
+                    continue;
+                }
+
+                series.push({ time: rueckPoint.time, delta: best.temp - rueckPoint.temp });
+            }
+
+            return series;
+        }
+
+        function trimDeltaSeriesFromStart(series, startDate) {
+            if (!series.length) {
+                return series;
+            }
+
+            const startMs = startDate.getTime();
+            if (!Number.isFinite(startMs)) {
+                return series;
+            }
+
+            const firstAfterIndex = series.findIndex(point => point.time.getTime() >= startMs);
+            if (firstAfterIndex === -1) {
+                return [];
+            }
+            if (firstAfterIndex === 0) {
+                return series.slice();
+            }
+
+            const prev = series[firstAfterIndex - 1];
+            const next = series[firstAfterIndex];
+            const prevMs = prev.time.getTime();
+            const nextMs = next.time.getTime();
+            if (nextMs <= prevMs) {
+                return series.slice(firstAfterIndex);
+            }
+
+            const ratio = (startMs - prevMs) / (nextMs - prevMs);
+            const interpolated = prev.delta + ratio * (next.delta - prev.delta);
+            return [{ time: new Date(startMs), delta: interpolated }, ...series.slice(firstAfterIndex)];
+        }
+
+        function formatDateTimeLocal(date) {
+            const pad = value => String(value).padStart(2, '0');
+            const year = date.getFullYear();
+            const month = pad(date.getMonth() + 1);
+            const day = pad(date.getDate());
+            const hours = pad(date.getHours());
+            const minutes = pad(date.getMinutes());
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        function parseDateTimeLocal(value) {
+            if (!value) {
+                return null;
+            }
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return null;
+            }
+            return parsed;
+        }
+
+        function getDefaultFlowEnergyStart() {
+            const now = new Date();
+            const start = new Date(now);
+            start.setHours(12, 0, 0, 0);
+            return start;
         }
 
         function applySmoothing(points, mode, windowMinutes) {

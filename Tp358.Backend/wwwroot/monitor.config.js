@@ -16,7 +16,12 @@ const flowGraph = {
     name: 'Vor-/Rücklauf',
     minTemp: 25,
     maxTemp: 50,
-    rowHeight: 400
+    rowHeight: 400,
+    heatEnergy: {
+        flowRateLitersPerMinute: 2.6,
+        densityKgPerLiter: 1,
+        specificHeatKJPerKgK: 4.186
+    }
 };
 const monitorGraph = {
     name: 'Monitor',

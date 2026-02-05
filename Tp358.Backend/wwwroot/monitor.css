@@ -249,6 +249,36 @@
             flex-wrap: wrap;
         }
 
+        .control-label {
+            font-size: 0.75em;
+            font-weight: 600;
+            color: #6b7280;
+        }
+
+        .flow-energy-start {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 4px;
+            border-radius: 8px;
+            background: #f3f4f6;
+        }
+
+        .flow-date {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #374151;
+            background: #fff;
+        }
+
+        .flow-date:focus {
+            outline: 2px solid #111827;
+            outline-offset: 1px;
+        }
+
         .control-right {
             justify-content: flex-end;
         }
@@ -350,6 +380,14 @@
             flex: 1;
             text-align: center;
             font-weight: 600;
+        }
+
+        .graph-title-energy {
+            flex: 1;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #374151;
         }
 
         .graph-title-latest {
