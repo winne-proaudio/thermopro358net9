@@ -144,7 +144,7 @@ internal static class BackendHost
             var to = DateTimeOffset.Now;
             var from = to.AddHours(-effectiveHours);
 
-            var deviceIds = new[] { "Vorlauf", "Rücklauf" };
+            var deviceIds = new[] { "Vorlauf", "Rücklauf", "EtagenRL" };
             var measurements = await databaseService.GetExternalTemperatureMeasurementsAsync(from, to, deviceIds, cancellationToken);
             return Results.Ok(measurements);
         });

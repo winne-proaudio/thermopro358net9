@@ -9,7 +9,8 @@ const externalGraph = {
     },
     series: [
         { deviceId: 'Vorlauf', label: 'Vorlauf', color: '#f97316' },
-        { deviceId: 'Rücklauf', label: 'Rücklauf', color: '#3b82f6' }
+        { deviceId: 'Rücklauf', label: 'Rücklauf', color: '#3b82f6' },
+        { deviceId: 'EtagenRL', label: 'EtagenRL', color: '#facc15' }
     ]
 };
 const flowGraph = {
