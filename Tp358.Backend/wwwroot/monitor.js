@@ -1031,9 +1031,9 @@ const sensors = new Map();
         }
 
         function computeDeltaStats(seriesList, deltaConfig) {
-            const steig = seriesList.find(item => item.label === 'Steigleitung');
+            const vorlauf = seriesList.find(item => item.label === 'Vorlauf');
             const rueck = seriesList.find(item => item.label === 'Rücklauf');
-            if (!steig || !rueck || steig.points.length === 0 || rueck.points.length === 0) {
+            if (!vorlauf || !rueck || vorlauf.points.length === 0 || rueck.points.length === 0) {
                 return null;
             }
 
@@ -1043,7 +1043,7 @@ const sensors = new Map();
             const matchMs = matchMinutes * 60 * 1000;
 
             const rueckPoints = rueck.points;
-            const steigPoints = steig.points;
+            const vorlaufPoints = vorlauf.points;
 
             const startIdx = requireThreshold
                 ? rueckPoints.findIndex(point => point.temp > threshold)
@@ -1055,23 +1055,23 @@ const sensors = new Map();
             let min = null;
             let max = null;
             let current = null;
-            let steigIndex = 0;
+            let vorlaufIndex = 0;
 
             for (let i = startIdx; i < rueckPoints.length; i += 1) {
                 const rueckPoint = rueckPoints[i];
                 const rueckTime = rueckPoint.time.getTime();
 
-                while (steigIndex < steigPoints.length && steigPoints[steigIndex].time.getTime() < rueckTime - matchMs) {
-                    steigIndex += 1;
+                while (vorlaufIndex < vorlaufPoints.length && vorlaufPoints[vorlaufIndex].time.getTime() < rueckTime - matchMs) {
+                    vorlaufIndex += 1;
                 }
 
                 let best = null;
                 const candidates = [];
-                if (steigIndex < steigPoints.length) {
-                    candidates.push(steigPoints[steigIndex]);
+                if (vorlaufIndex < vorlaufPoints.length) {
+                    candidates.push(vorlaufPoints[vorlaufIndex]);
                 }
-                if (steigIndex > 0) {
-                    candidates.push(steigPoints[steigIndex - 1]);
+                if (vorlaufIndex > 0) {
+                    candidates.push(vorlaufPoints[vorlaufIndex - 1]);
                 }
 
                 candidates.forEach(candidate => {
@@ -1103,18 +1103,18 @@ const sensors = new Map();
         }
 
         function computeHeatEnergyKwh(seriesList, startDate, deltaConfig, heatConfig) {
-            const steig = seriesList.find(item => item.label === 'Steigleitung');
+            const vorlauf = seriesList.find(item => item.label === 'Vorlauf');
             const rueck = seriesList.find(item => item.label === 'Rücklauf');
-            if (!steig || !rueck || steig.points.length === 0 || rueck.points.length === 0) {
+            if (!vorlauf || !rueck || vorlauf.points.length === 0 || rueck.points.length === 0) {
                 return null;
             }
             if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
                 return null;
             }
 
-            const steigPoints = steig.points.slice().sort((a, b) => a.time - b.time);
+            const vorlaufPoints = vorlauf.points.slice().sort((a, b) => a.time - b.time);
             const rueckPoints = rueck.points.slice().sort((a, b) => a.time - b.time);
-            const deltaSeries = computeDeltaSeries(steigPoints, rueckPoints, deltaConfig);
+            const deltaSeries = computeDeltaSeries(vorlaufPoints, rueckPoints, deltaConfig);
             if (!deltaSeries || deltaSeries.length === 0) {
                 return null;
             }
@@ -1146,30 +1146,30 @@ const sensors = new Map();
             return Number.isFinite(energyKwh) ? energyKwh : null;
         }
 
-        function computeDeltaSeries(steigPoints, rueckPoints, deltaConfig) {
-            if (!steigPoints.length || !rueckPoints.length) {
+        function computeDeltaSeries(vorlaufPoints, rueckPoints, deltaConfig) {
+            if (!vorlaufPoints.length || !rueckPoints.length) {
                 return [];
             }
             const matchMinutes = deltaConfig?.matchMinutes ?? 2;
             const matchMs = matchMinutes * 60 * 1000;
             const series = [];
-            let steigIndex = 0;
+            let vorlaufIndex = 0;
 
             for (let i = 0; i < rueckPoints.length; i += 1) {
                 const rueckPoint = rueckPoints[i];
                 const rueckTime = rueckPoint.time.getTime();
 
-                while (steigIndex < steigPoints.length && steigPoints[steigIndex].time.getTime() < rueckTime - matchMs) {
-                    steigIndex += 1;
+                while (vorlaufIndex < vorlaufPoints.length && vorlaufPoints[vorlaufIndex].time.getTime() < rueckTime - matchMs) {
+                    vorlaufIndex += 1;
                 }
 
                 let best = null;
                 const candidates = [];
-                if (steigIndex < steigPoints.length) {
-                    candidates.push(steigPoints[steigIndex]);
+                if (vorlaufIndex < vorlaufPoints.length) {
+                    candidates.push(vorlaufPoints[vorlaufIndex]);
                 }
-                if (steigIndex > 0) {
-                    candidates.push(steigPoints[steigIndex - 1]);
+                if (vorlaufIndex > 0) {
+                    candidates.push(vorlaufPoints[vorlaufIndex - 1]);
                 }
 
                 candidates.forEach(candidate => {

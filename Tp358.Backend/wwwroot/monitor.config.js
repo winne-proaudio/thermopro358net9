@@ -8,7 +8,7 @@ const externalGraph = {
         matchMinutes: 2
     },
     series: [
-        { deviceId: 'Steigleitung', label: 'Steigleitung', color: '#f97316' },
+        { deviceId: 'Vorlauf', label: 'Vorlauf', color: '#f97316' },
         { deviceId: 'Rücklauf', label: 'Rücklauf', color: '#3b82f6' }
     ]
 };
