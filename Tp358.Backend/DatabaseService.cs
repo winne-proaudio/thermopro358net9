@@ -189,6 +189,63 @@ public sealed class DatabaseService
         return results;
     }
 
+    public async Task<IReadOnlyList<ExternalTemperatureMeasurement>> GetOldExternalTemperatureMeasurementsAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IReadOnlyList<string> deviceIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_isAvailable)
+        {
+            return Array.Empty<ExternalTemperatureMeasurement>();
+        }
+
+        var results = new List<ExternalTemperatureMeasurement>();
+
+        try
+        {
+            await using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            if (deviceIds is null || deviceIds.Count == 0)
+            {
+                return Array.Empty<ExternalTemperatureMeasurement>();
+            }
+
+            var deviceParameters = string.Join(", ", deviceIds.Select((_, index) => $"@device{index}"));
+            var selectSql = @"
+                SELECT `DeviceId`, `Timestamp`, `Temperature`
+                FROM `esp32`.`OldMeasurements`
+                WHERE `Timestamp` BETWEEN @from AND @to
+                  AND `DeviceId` IN (" + deviceParameters + @")
+                ORDER BY `Timestamp` ASC;
+            ";
+
+            await using var command = new MySqlCommand(selectSql, connection);
+            command.Parameters.AddWithValue("@from", from.DateTime);
+            command.Parameters.AddWithValue("@to", to.DateTime);
+            for (var i = 0; i < deviceIds.Count; i++)
+            {
+                command.Parameters.AddWithValue($"@device{i}", deviceIds[i]);
+            }
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var deviceId = reader.GetString(0);
+                var timestamp = reader.GetDateTime(1);
+                double? temperature = reader.IsDBNull(2) ? null : reader.GetDouble(2);
+                results.Add(new ExternalTemperatureMeasurement(deviceId, timestamp, temperature));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Fehler beim Laden der OldMeasurements aus der Datenbank");
+        }
+
+        return results;
+    }
+
     public async Task<ExternalTemperatureStats> GetExternalTemperatureStatsAsync(CancellationToken cancellationToken = default)
     {
         if (!_isAvailable)

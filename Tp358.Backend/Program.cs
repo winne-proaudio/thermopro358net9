@@ -168,6 +168,21 @@ internal static class BackendHost
             var measurements = await databaseService.GetExternalTemperatureMeasurementsAsync(from, to, deviceIds, cancellationToken);
             return Results.Ok(measurements);
         });
+        app.MapGet("/measurements/external/old", async (DatabaseService databaseService, int? hours, CancellationToken cancellationToken) =>
+        {
+            if (!databaseService.IsAvailable)
+            {
+                return Results.StatusCode(503);
+            }
+
+            var effectiveHours = Math.Clamp(hours ?? 24, 1, 168);
+            var to = DateTimeOffset.Now;
+            var from = to.AddHours(-effectiveHours);
+
+            var deviceIds = new[] { "Steigleitung", "Rücklauf" };
+            var measurements = await databaseService.GetOldExternalTemperatureMeasurementsAsync(from, to, deviceIds, cancellationToken);
+            return Results.Ok(measurements);
+        });
 
         app.MapGet("/measurements/external/stats", async (DatabaseService databaseService, CancellationToken cancellationToken) =>
         {

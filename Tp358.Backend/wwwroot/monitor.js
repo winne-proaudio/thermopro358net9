@@ -162,9 +162,11 @@ const sensors = new Map();
         const graphViewButton = document.getElementById('graphViewButton');
         const flowViewButton = document.getElementById('flowViewButton');
         const monitorViewButton = document.getElementById('monitorViewButton');
+        const oldFlowViewButton = document.getElementById('oldFlowViewButton');
         const settingsViewButton = document.getElementById('settingsViewButton');
         const graphControls = document.getElementById('graphControls');
         const flowControls = document.getElementById('flowControls');
+        const oldFlowControls = document.getElementById('oldFlowControls');
         const timeButtons = Array.from(document.querySelectorAll('#graphControls .time-btn'));
         const smoothButtons = Array.from(document.querySelectorAll('#graphControls .smooth-btn'));
         const smoothMinus = document.getElementById('smoothMinus');
@@ -176,6 +178,13 @@ const sensors = new Map();
         const flowSmoothPlus = document.getElementById('flowSmoothPlus');
         const flowSmoothMinutesLabel = document.getElementById('flowSmoothMinutesLabel');
         const flowEnergyStartInput = document.getElementById('flowEnergyStart');
+        const oldFlowTimeButtons = Array.from(document.querySelectorAll('#oldFlowControls .old-flow-time-btn'));
+        const oldFlowFitButton = document.getElementById('oldFlowFitButton');
+        const oldFlowSmoothButtons = Array.from(document.querySelectorAll('#oldFlowControls .old-flow-smooth-btn'));
+        const oldFlowSmoothMinus = document.getElementById('oldFlowSmoothMinus');
+        const oldFlowSmoothPlus = document.getElementById('oldFlowSmoothPlus');
+        const oldFlowSmoothMinutesLabel = document.getElementById('oldFlowSmoothMinutesLabel');
+        const oldFlowEnergyStartInput = document.getElementById('oldFlowEnergyStart');
         const homeView = document.getElementById('homeView');
         const graphView = document.getElementById('graphView');
         const flowView = document.getElementById('flowView');
@@ -190,6 +199,9 @@ const sensors = new Map();
         const monitorMinutesPlus = document.getElementById('monitorMinutesPlus');
         const monitorMinutesLabel = document.getElementById('monitorMinutesLabel');
         const monitorSmoothToggle = document.getElementById('monitorSmoothToggle');
+        const oldFlowView = document.getElementById('oldFlowView');
+        const oldFlowContainer = document.getElementById('oldFlowContainer');
+        const oldFlowNoData = document.getElementById('oldFlowNoData');
         const settingsView = document.getElementById('settingsView');
         const settingsSignalRInterval = document.getElementById('settingsSignalRInterval');
         const settingsDbInterval = document.getElementById('settingsDbInterval');
@@ -210,6 +222,11 @@ const sensors = new Map();
         let flowSmoothingWindowMinutes = 2;
         let flowHours = 24;
         let flowEnergyStart = null;
+        let oldFlowSmoothingMode = 'A';
+        let oldFlowSmoothingWindowMinutes = 2;
+        let oldFlowHours = 24;
+        let oldFlowEnergyStart = null;
+        let oldFlowFitToView = false;
         let currentGraphRefreshIntervalMs = graphRefreshIntervalMs;
         let monitorWindowMinutes = monitorGraph.windowMinutes;
         const monitorStepMinutes = 5;
@@ -217,6 +234,8 @@ const sensors = new Map();
         let monitorSmoothingWindowMinutes = 5;
         let lastGraphError = false;
         let lastExternalError = false;
+        let latestOldExternalSeries = new Map();
+        let lastOldExternalError = false;
         let settingsSnapshot = null;
         const settingsMinSeconds = 30;
         const settingsMaxSeconds = 15 * 60;
@@ -228,27 +247,31 @@ const sensors = new Map();
             const isGraph = view === 'graph';
             const isFlow = view === 'flow';
             const isMonitor = view === 'monitor';
+            const isOldFlow = view === 'oldFlow';
             const isSettings = view === 'settings';
             homeView.style.display = isHome ? 'block' : 'none';
             graphView.style.display = isGraph ? 'flex' : 'none';
             flowView.style.display = isFlow ? 'flex' : 'none';
             monitorView.style.display = isMonitor ? 'flex' : 'none';
+            oldFlowView.style.display = isOldFlow ? 'flex' : 'none';
             settingsView.style.display = isSettings ? 'flex' : 'none';
             homeViewButton.classList.toggle('active', isHome);
             graphViewButton.classList.toggle('active', isGraph);
             flowViewButton.classList.toggle('active', isFlow);
             monitorViewButton.classList.toggle('active', isMonitor);
+            oldFlowViewButton.classList.toggle('active', isOldFlow);
             settingsViewButton.classList.toggle('active', isSettings);
             graphControls.style.display = isGraph ? 'flex' : 'none';
             flowControls.style.display = isFlow ? 'flex' : 'none';
+            oldFlowControls.style.display = isOldFlow ? 'flex' : 'none';
             timeButtons.forEach(btn => {
-                btn.disabled = isHome || isFlow || isMonitor || isSettings;
+                btn.disabled = isHome || isFlow || isMonitor || isOldFlow || isSettings;
             });
             smoothButtons.forEach(btn => {
-                btn.disabled = isHome || isFlow || isMonitor || isSettings;
+                btn.disabled = isHome || isFlow || isMonitor || isOldFlow || isSettings;
             });
-            smoothMinus.disabled = isHome || isFlow || isMonitor || isSettings;
-            smoothPlus.disabled = isHome || isFlow || isMonitor || isSettings;
+            smoothMinus.disabled = isHome || isFlow || isMonitor || isOldFlow || isSettings;
+            smoothPlus.disabled = isHome || isFlow || isMonitor || isOldFlow || isSettings;
             flowTimeButtons.forEach(btn => {
                 btn.disabled = !isFlow;
             });
@@ -257,10 +280,21 @@ const sensors = new Map();
             });
             flowSmoothMinus.disabled = !isFlow;
             flowSmoothPlus.disabled = !isFlow;
+            oldFlowTimeButtons.forEach(btn => {
+                btn.disabled = !isOldFlow;
+            });
+            if (oldFlowFitButton) {
+                oldFlowFitButton.disabled = !isOldFlow;
+            }
+            oldFlowSmoothButtons.forEach(btn => {
+                btn.disabled = !isOldFlow;
+            });
+            oldFlowSmoothMinus.disabled = !isOldFlow;
+            oldFlowSmoothPlus.disabled = !isOldFlow;
             if (isHome || isSettings) {
                 stopGraphRefresh();
             } else {
-                loadGraphData();
+                loadCurrentViewData();
                 startGraphRefresh(isMonitor ? monitorGraph.refreshIntervalMs : graphRefreshIntervalMs);
             }
             if (isSettings) {
@@ -272,6 +306,7 @@ const sensors = new Map();
         graphViewButton.addEventListener('click', () => setView('graph'));
         flowViewButton.addEventListener('click', () => setView('flow'));
         monitorViewButton.addEventListener('click', () => setView('monitor'));
+        oldFlowViewButton.addEventListener('click', () => setView('oldFlow'));
         settingsViewButton.addEventListener('click', () => setView('settings'));
         timeButtons.forEach(button => {
             button.addEventListener('click', () => {
@@ -306,6 +341,28 @@ const sensors = new Map();
                 setFlowEnergyStart(parseDateTimeLocal(flowEnergyStartInput.value));
             });
         }
+        oldFlowTimeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const hours = Number.parseInt(button.dataset.hours ?? '24', 10);
+                setOldFlowTimeRange(Number.isFinite(hours) ? hours : 24);
+            });
+        });
+        if (oldFlowFitButton) {
+            oldFlowFitButton.addEventListener('click', () => setOldFlowFitToView(true));
+        }
+        oldFlowSmoothButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.smooth ?? 'A';
+                setOldFlowSmoothingMode(mode);
+            });
+        });
+        oldFlowSmoothMinus.addEventListener('click', () => setOldFlowSmoothingMinutes(oldFlowSmoothingWindowMinutes - 1));
+        oldFlowSmoothPlus.addEventListener('click', () => setOldFlowSmoothingMinutes(oldFlowSmoothingWindowMinutes + 1));
+        if (oldFlowEnergyStartInput) {
+            oldFlowEnergyStartInput.addEventListener('change', () => {
+                setOldFlowEnergyStart(parseDateTimeLocal(oldFlowEnergyStartInput.value));
+            });
+        }
         monitorMinutesMinus.addEventListener('click', () => setMonitorWindowMinutes(monitorWindowMinutes - monitorStepMinutes));
         monitorMinutesPlus.addEventListener('click', () => setMonitorWindowMinutes(monitorWindowMinutes + monitorStepMinutes));
         monitorSmoothToggle.addEventListener('click', () => toggleMonitorSmoothing());
@@ -325,6 +382,11 @@ const sensors = new Map();
         function initializeFlowEnergyStart() {
             const defaultStart = getDefaultFlowEnergyStart();
             setFlowEnergyStart(defaultStart, true);
+        }
+
+        function initializeOldFlowEnergyStart() {
+            const defaultStart = getDefaultFlowEnergyStart();
+            setOldFlowEnergyStart(defaultStart, true);
         }
 
         function setTimeRange(hours) {
@@ -412,6 +474,85 @@ const sensors = new Map();
             }
             const now = new Date();
             const diffMs = now.getTime() - flowEnergyStart.getTime();
+            if (!Number.isFinite(diffMs) || diffMs <= 0) {
+                return 0;
+            }
+            return Math.max(1, Math.ceil(diffMs / (60 * 60 * 1000)));
+        }
+
+        function setOldFlowTimeRange(hours) {
+            oldFlowFitToView = false;
+            if (oldFlowFitButton) {
+                oldFlowFitButton.classList.remove('active');
+            }
+            oldFlowHours = hours;
+            oldFlowTimeButtons.forEach(btn => {
+                btn.classList.toggle('active', Number.parseInt(btn.dataset.hours ?? '0', 10) === hours);
+            });
+            if (currentView === 'oldFlow') {
+                loadOldFlowData();
+            }
+        }
+
+        function setOldFlowFitToView(enabled) {
+            oldFlowFitToView = enabled;
+            if (oldFlowFitButton) {
+                oldFlowFitButton.classList.toggle('active', enabled);
+            }
+            if (enabled) {
+                oldFlowTimeButtons.forEach(btn => btn.classList.remove('active'));
+            }
+            if (currentView === 'oldFlow') {
+                loadOldFlowData();
+            }
+        }
+
+        function setOldFlowSmoothingMode(mode) {
+            oldFlowSmoothingMode = ['A', 'B'].includes(mode) ? mode : 'A';
+            oldFlowSmoothButtons.forEach(btn => {
+                btn.classList.toggle('active', (btn.dataset.smooth ?? 'A') === oldFlowSmoothingMode);
+            });
+            if (currentView === 'oldFlow') {
+                renderOldFlowGraph(latestOldExternalSeries, lastOldExternalError);
+            }
+        }
+
+        function setOldFlowSmoothingMinutes(minutes) {
+            const next = Math.max(1, minutes);
+            oldFlowSmoothingWindowMinutes = next;
+            oldFlowSmoothMinutesLabel.textContent = `${next} min`;
+            if (currentView === 'oldFlow') {
+                renderOldFlowGraph(latestOldExternalSeries, lastOldExternalError);
+            }
+        }
+
+        function setOldFlowEnergyStart(date, skipReload) {
+            if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                oldFlowEnergyStart = null;
+                if (oldFlowEnergyStartInput) {
+                    oldFlowEnergyStartInput.value = '';
+                }
+                if (!skipReload && currentView === 'oldFlow') {
+                    renderOldFlowGraph(latestOldExternalSeries, lastOldExternalError);
+                }
+                return;
+            }
+
+            oldFlowEnergyStart = date;
+            if (oldFlowEnergyStartInput) {
+                oldFlowEnergyStartInput.value = formatDateTimeLocal(oldFlowEnergyStart);
+            }
+            if (!skipReload && currentView === 'oldFlow') {
+                loadOldFlowData();
+            }
+        }
+
+        function getOldFlowEnergyHours() {
+            if (!oldFlowEnergyStart) {
+                return 0;
+            }
+            const now = new Date();
+            const diffMs = now.getTime() - oldFlowEnergyStart.getTime();
             if (!Number.isFinite(diffMs) || diffMs <= 0) {
                 return 0;
             }
@@ -566,6 +707,7 @@ const sensors = new Map();
 
         updateMonitorSmoothingUi();
         initializeFlowEnergyStart();
+        initializeOldFlowEnergyStart();
         loadDeviceNames();
 
         const shutdownButton = document.getElementById('shutdownButton');
@@ -609,7 +751,7 @@ const sensors = new Map();
             }
             stopGraphRefresh();
             currentGraphRefreshIntervalMs = intervalMs;
-            graphRefreshTimer = setInterval(loadGraphData, intervalMs);
+            graphRefreshTimer = setInterval(loadCurrentViewData, intervalMs);
         }
 
         function stopGraphRefresh() {
@@ -618,6 +760,13 @@ const sensors = new Map();
             }
             clearInterval(graphRefreshTimer);
             graphRefreshTimer = null;
+        }
+
+        function loadCurrentViewData() {
+            if (currentView === 'oldFlow') {
+                return loadOldFlowData();
+            }
+            return loadGraphData();
         }
 
         async function loadGraphData() {
@@ -706,6 +855,50 @@ const sensors = new Map();
             } else {
                 renderGraphs(grouped, externalSeries, sensorError || externalError);
             }
+        }
+
+        async function loadOldFlowData() {
+            const maxHours = 168;
+            let externalHours = oldFlowFitToView ? maxHours : oldFlowHours;
+            const energyHours = getOldFlowEnergyHours();
+            if (Number.isFinite(energyHours) && energyHours > externalHours) {
+                externalHours = energyHours;
+            }
+
+            let externalSeries = new Map();
+            let externalError = false;
+
+            try {
+                const response = await fetch(`/measurements/external/old?hours=${externalHours}`);
+                if (!response.ok) {
+                    throw new Error('Externe Messwerte konnten nicht geladen werden');
+                }
+                const measurements = await response.json();
+                externalSeries = new Map();
+                measurements.forEach(item => {
+                    if (!item.deviceId) {
+                        return;
+                    }
+                    if (item.temperature === null || item.temperature === undefined) {
+                        return;
+                    }
+                    if (!externalSeries.has(item.deviceId)) {
+                        externalSeries.set(item.deviceId, []);
+                    }
+                    externalSeries.get(item.deviceId).push({
+                        time: parseExternalTimestamp(item.timestamp),
+                        temp: item.temperature
+                    });
+                });
+            } catch (error) {
+                externalError = true;
+                console.error('Old Flow External Error:', error);
+            }
+
+            latestOldExternalSeries = externalSeries;
+            lastOldExternalError = externalError;
+
+            renderOldFlowGraph(externalSeries, externalError);
         }
 
         function renderGraphs(seriesByDevice, externalSeries, hadError) {
@@ -890,6 +1083,79 @@ const sensors = new Map();
             flowNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
         }
 
+        function renderOldFlowGraph(externalSeries, hadError) {
+            oldFlowContainer.innerHTML = '';
+            let hasData = false;
+            const timeRange = oldFlowFitToView
+                ? getTimeRangeFromSeries(externalSeries, oldFlowHours)
+                : getTimeRange(oldFlowHours);
+
+            const row = document.createElement('div');
+            row.className = 'graph-row';
+
+            const title = document.createElement('div');
+            title.className = 'graph-title';
+
+            const titleLeft = document.createElement('div');
+            titleLeft.className = 'graph-title-left';
+
+            const titleCenter = document.createElement('div');
+            titleCenter.className = 'graph-title-center';
+
+            const titleEnergy = document.createElement('div');
+            titleEnergy.className = 'graph-title-energy';
+
+            const titleLatest = document.createElement('div');
+            titleLatest.className = 'graph-title-latest';
+
+            const legend = document.createElement('div');
+            legend.className = 'graph-legend';
+            oldFlowGraph.series.forEach(item => {
+                const legendItem = document.createElement('div');
+                const dot = document.createElement('span');
+                dot.className = 'legend-dot';
+                dot.style.background = item.color;
+                legendItem.appendChild(dot);
+                legendItem.appendChild(document.createTextNode(item.label));
+                legend.appendChild(legendItem);
+            });
+
+            const canvas = document.createElement('canvas');
+            canvas.className = 'graph-canvas';
+
+            row.appendChild(title);
+            row.appendChild(legend);
+            row.appendChild(canvas);
+            oldFlowContainer.appendChild(row);
+
+            const seriesList = oldFlowGraph.series.map(item => {
+                const points = (externalSeries.get(item.deviceId) || []).slice().sort((a, b) => a.time - b.time);
+                const smoothedPoints = applySmoothing(points, oldFlowSmoothingMode, oldFlowSmoothingWindowMinutes);
+                const visiblePoints = filterPointsByRange(smoothedPoints, timeRange);
+                if (visiblePoints.length > 0) {
+                    hasData = true;
+                }
+                return { label: item.label, color: item.color, points: visiblePoints };
+            });
+
+            const latestText = formatLatestTemps(seriesList);
+            const deltaText = formatDeltaText(seriesList, { ...oldFlowGraph.delta, requireThreshold: false });
+            const heatText = formatHeatEnergyTextWithStart(seriesList, oldFlowEnergyStart, oldFlowGraph.delta, oldFlowGraph.heatEnergy);
+            titleLeft.textContent = oldFlowGraph.name;
+            titleCenter.textContent = deltaText;
+            titleEnergy.textContent = heatText;
+            titleLatest.innerHTML = latestText;
+            title.appendChild(titleLeft);
+            title.appendChild(titleCenter);
+            title.appendChild(titleEnergy);
+            title.appendChild(titleLatest);
+
+            drawGraphMulti(canvas, seriesList, oldFlowGraph.minTemp, oldFlowGraph.maxTemp, timeRange, oldFlowGraph.rowHeight);
+
+            oldFlowNoData.style.display = hasData ? 'none' : 'block';
+            oldFlowNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
+        }
+
         function renderMonitorGraph(externalSeries, hadError) {
             monitorContainer.innerHTML = '';
             let hasData = false;
@@ -968,6 +1234,39 @@ const sensors = new Map();
             }
             const from = new Date(to.getTime() - effectiveHours * 60 * 60 * 1000);
             return { from, to, totalMs: to - from, hours: effectiveHours };
+        }
+
+        function getTimeRangeFromSeries(seriesMap, fallbackHours) {
+            if (!seriesMap || seriesMap.size === 0) {
+                return getTimeRange(fallbackHours);
+            }
+            let minMs = null;
+            let maxMs = null;
+            seriesMap.forEach(points => {
+                if (!points || points.length === 0) {
+                    return;
+                }
+                points.forEach(point => {
+                    const t = point?.time?.getTime?.();
+                    if (!Number.isFinite(t)) {
+                        return;
+                    }
+                    if (minMs === null || t < minMs) {
+                        minMs = t;
+                    }
+                    if (maxMs === null || t > maxMs) {
+                        maxMs = t;
+                    }
+                });
+            });
+            if (minMs === null || maxMs === null || maxMs <= minMs) {
+                return getTimeRange(fallbackHours);
+            }
+            const from = new Date(minMs);
+            const to = new Date(maxMs);
+            const totalMs = maxMs - minMs;
+            const hours = Math.max(1, totalMs / (60 * 60 * 1000));
+            return { from, to, totalMs, hours };
         }
 
         function getTimeRangeMinutes(minutes) {
@@ -1227,10 +1526,14 @@ const sensors = new Map();
         }
 
         function formatHeatEnergyText(seriesList) {
-            if (!flowEnergyStart) {
+            return formatHeatEnergyTextWithStart(seriesList, flowEnergyStart, externalGraph.delta, flowGraph.heatEnergy);
+        }
+
+        function formatHeatEnergyTextWithStart(seriesList, startDate, deltaConfig, heatConfig) {
+            if (!startDate) {
                 return 'Wärmemenge: n/a';
             }
-            const energyKwh = computeHeatEnergyKwh(seriesList, flowEnergyStart, externalGraph.delta, flowGraph.heatEnergy);
+            const energyKwh = computeHeatEnergyKwh(seriesList, startDate, deltaConfig, heatConfig);
             if (energyKwh === null) {
                 return 'Wärmemenge: n/a';
             }
@@ -1238,8 +1541,10 @@ const sensors = new Map();
         }
 
         function computeDeltaStats(seriesList, deltaConfig) {
-            const vorlauf = seriesList.find(item => item.label === 'Vorlauf');
-            const rueck = seriesList.find(item => item.label === 'Rücklauf');
+            const hotLabel = deltaConfig?.hotLabel ?? 'Vorlauf';
+            const coldLabel = deltaConfig?.coldLabel ?? 'Rücklauf';
+            const vorlauf = seriesList.find(item => item.label === hotLabel);
+            const rueck = seriesList.find(item => item.label === coldLabel);
             if (!vorlauf || !rueck || vorlauf.points.length === 0 || rueck.points.length === 0) {
                 return null;
             }
@@ -1310,8 +1615,10 @@ const sensors = new Map();
         }
 
         function computeHeatEnergyKwh(seriesList, startDate, deltaConfig, heatConfig) {
-            const vorlauf = seriesList.find(item => item.label === 'Vorlauf');
-            const rueck = seriesList.find(item => item.label === 'Rücklauf');
+            const hotLabel = deltaConfig?.hotLabel ?? 'Vorlauf';
+            const coldLabel = deltaConfig?.coldLabel ?? 'Rücklauf';
+            const vorlauf = seriesList.find(item => item.label === hotLabel);
+            const rueck = seriesList.find(item => item.label === coldLabel);
             if (!vorlauf || !rueck || vorlauf.points.length === 0 || rueck.points.length === 0) {
                 return null;
             }
@@ -1547,6 +1854,8 @@ const sensors = new Map();
                 renderGraphs(latestGraphSeries, latestExternalSeries, lastGraphError);
             } else if (currentView === 'flow') {
                 renderFlowGraph(latestExternalSeries, lastExternalError);
+            } else if (currentView === 'oldFlow') {
+                renderOldFlowGraph(latestOldExternalSeries, lastOldExternalError);
             } else if (currentView === 'monitor') {
                 renderMonitorGraph(latestExternalSeries, lastExternalError);
             }

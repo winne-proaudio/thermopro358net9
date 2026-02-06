@@ -24,6 +24,7 @@
                     <button id="graphViewButton" class="view-btn" type="button">GRAPH</button>
                     <button id="flowViewButton" class="view-btn" type="button">Vor-Rücklauf</button>
                     <button id="monitorViewButton" class="view-btn" type="button">Monitor</button>
+                    <button id="oldFlowViewButton" class="view-btn" type="button">Fit-View</button>
                     <button id="settingsViewButton" class="view-btn" type="button">Settings</button>
                 </div>
                 <div class="status-actions-right">
@@ -107,6 +108,35 @@
             </div>
             <div id="monitorContainer"></div>
             <div id="monitorNoData" class="no-data" style="display: none;">
+                Keine Messwerte in der Datenbank gefunden.
+            </div>
+        </div>
+
+        <div id="oldFlowView" class="graph-view" style="display: none;">
+            <div id="oldFlowControls" class="status-controls flow-controls">
+                <div class="control-group control-left">
+                    <button class="view-btn old-flow-time-btn" type="button" data-hours="12">12h</button>
+                    <button class="view-btn old-flow-time-btn active" type="button" data-hours="24">1 Tag</button>
+                    <button class="view-btn old-flow-time-btn" type="button" data-hours="48">2 Tage</button>
+                    <button class="view-btn old-flow-time-btn" type="button" data-hours="168">1 Woche</button>
+                    <button id="oldFlowFitButton" class="view-btn old-flow-fit-btn" type="button">FitToView</button>
+                </div>
+                <div class="control-group control-right">
+                    <div class="flow-energy-start">
+                        <label class="control-label" for="oldFlowEnergyStart">Start</label>
+                        <input id="oldFlowEnergyStart" class="flow-date" type="datetime-local">
+                    </div>
+                    <button class="view-btn old-flow-smooth-btn active" type="button" data-smooth="A">A Median</button>
+                    <button class="view-btn old-flow-smooth-btn" type="button" data-smooth="B">B EMA</button>
+                    <div class="smooth-window">
+                        <button id="oldFlowSmoothMinus" class="view-btn smooth-adjust" type="button">-</button>
+                        <span id="oldFlowSmoothMinutesLabel" class="smooth-label">2 min</span>
+                        <button id="oldFlowSmoothPlus" class="view-btn smooth-adjust" type="button">+</button>
+                    </div>
+                </div>
+            </div>
+            <div id="oldFlowContainer"></div>
+            <div id="oldFlowNoData" class="no-data" style="display: none;">
                 Keine Messwerte in der Datenbank gefunden.
             </div>
         </div>

@@ -24,6 +24,27 @@ const flowGraph = {
         specificHeatKJPerKgK: 4.186
     }
 };
+const oldFlowGraph = {
+    name: 'Steigleitung/Rücklauf',
+    minTemp: 25,
+    maxTemp: 50,
+    rowHeight: 400,
+    heatEnergy: {
+        flowRateLitersPerMinute: 2.6,
+        densityKgPerLiter: 1,
+        specificHeatKJPerKgK: 4.186
+    },
+    delta: {
+        startThreshold: 38,
+        matchMinutes: 2,
+        hotLabel: 'Steigleitung',
+        coldLabel: 'Rücklauf'
+    },
+    series: [
+        { deviceId: 'Steigleitung', label: 'Steigleitung', color: '#f97316' },
+        { deviceId: 'Rücklauf', label: 'Rücklauf', color: '#3b82f6' }
+    ]
+};
 const monitorGraph = {
     name: 'Monitor',
     minTemp: 25,
