@@ -15,6 +15,8 @@
                 <div class="status-indicator"></div>
                 <span id="connectionStatus">Backend</span>
                 <span id="bleAdapterStatus" class="status-adapter">BLE: n/a</span>
+                <span id="bleSignalDot" class="ble-status-dot is-unknown" title="BLE Status"></span>
+                <span id="bleSignalStatus" class="status-warning" style="display: none;"></span>
             </div>
             <div class="status-actions">
                 <div class="status-actions-left">
@@ -22,6 +24,7 @@
                     <button id="graphViewButton" class="view-btn" type="button">GRAPH</button>
                     <button id="flowViewButton" class="view-btn" type="button">Vor-Rücklauf</button>
                     <button id="monitorViewButton" class="view-btn" type="button">Monitor</button>
+                    <button id="settingsViewButton" class="view-btn" type="button">Settings</button>
                 </div>
                 <div class="status-actions-right">
                     <button id="shutdownButton" class="shutdown-btn" type="button" disabled>
@@ -105,6 +108,36 @@
             <div id="monitorContainer"></div>
             <div id="monitorNoData" class="no-data" style="display: none;">
                 Keine Messwerte in der Datenbank gefunden.
+            </div>
+        </div>
+
+        <div id="settingsView" class="graph-view" style="display: none;">
+            <div class="settings-card">
+                <h2 class="settings-title">Intervalle</h2>
+                <p class="settings-subtitle">Gilt pro Gerät. Werte werden beim Backend-Start aus appsettings.json geladen.</p>
+
+                <div class="settings-row">
+                    <label class="settings-label" for="settingsSignalRInterval">SignalR (Browser)</label>
+                    <input id="settingsSignalRInterval" class="settings-range" type="range" min="30" max="900" step="30" value="60">
+                    <span id="settingsSignalRValue" class="settings-value">60 s</span>
+                </div>
+
+                <div class="settings-row">
+                    <label class="settings-label" for="settingsDbInterval">Datenbank</label>
+                    <input id="settingsDbInterval" class="settings-range" type="range" min="30" max="900" step="30" value="300" disabled>
+                    <span id="settingsDbValue" class="settings-value">5 min (fix)</span>
+                </div>
+
+                <div class="settings-row">
+                    <label class="settings-label" for="settingsBleWarningInterval">BLE Warnung</label>
+                    <input id="settingsBleWarningInterval" class="settings-range" type="range" min="30" max="900" step="30" value="300">
+                    <span id="settingsBleWarningValue" class="settings-value">5 min</span>
+                </div>
+
+                <div class="settings-actions">
+                    <button id="settingsSaveButton" class="view-btn" type="button">Speichern</button>
+                    <span id="settingsStatus" class="settings-status"></span>
+                </div>
             </div>
         </div>
     </div>

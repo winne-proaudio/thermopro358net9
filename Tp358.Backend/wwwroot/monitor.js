@@ -66,6 +66,8 @@ const sensors = new Map();
         const statusIndicator = document.querySelector('.status-indicator');
         const connectionStatus = document.getElementById('connectionStatus');
         const bleAdapterStatus = document.getElementById('bleAdapterStatus');
+        const bleSignalDot = document.getElementById('bleSignalDot');
+        const bleSignalStatus = document.getElementById('bleSignalStatus');
 
         function setConnectionState(state, message) {
             statusIndicator.classList.remove('is-ok', 'is-warn', 'is-error');
@@ -108,10 +110,59 @@ const sensors = new Map();
             }
         }
 
+        async function loadBleSignalStatus() {
+            if (!bleSignalStatus) {
+                return;
+            }
+            try {
+                const response = await fetch('/status/ble/activity');
+                if (!response.ok) {
+                    throw new Error('BLE-Aktivitaet konnte nicht geladen werden');
+                }
+                const data = await response.json();
+                updateBleSignalStatus(data);
+            } catch (error) {
+                console.warn('BLE-Aktivitaet konnte nicht geladen werden:', error);
+            }
+        }
+
+        function updateBleSignalStatus(data) {
+            if (!bleSignalStatus) {
+                return;
+            }
+            if (data && data.warning) {
+                bleSignalStatus.textContent = data.message || 'BLE WARNUNG';
+                bleSignalStatus.style.display = 'inline-flex';
+                setBleSignalDot('error', data.message);
+            } else {
+                bleSignalStatus.textContent = '';
+                bleSignalStatus.style.display = 'none';
+                setBleSignalDot('ok', 'BLE aktiv');
+            }
+        }
+
+        function setBleSignalDot(state, title) {
+            if (!bleSignalDot) {
+                return;
+            }
+            bleSignalDot.classList.remove('is-ok', 'is-error', 'is-unknown');
+            if (state === 'ok') {
+                bleSignalDot.classList.add('is-ok');
+            } else if (state === 'error') {
+                bleSignalDot.classList.add('is-error');
+            } else {
+                bleSignalDot.classList.add('is-unknown');
+            }
+            if (title) {
+                bleSignalDot.title = title;
+            }
+        }
+
         const homeViewButton = document.getElementById('homeViewButton');
         const graphViewButton = document.getElementById('graphViewButton');
         const flowViewButton = document.getElementById('flowViewButton');
         const monitorViewButton = document.getElementById('monitorViewButton');
+        const settingsViewButton = document.getElementById('settingsViewButton');
         const graphControls = document.getElementById('graphControls');
         const flowControls = document.getElementById('flowControls');
         const timeButtons = Array.from(document.querySelectorAll('#graphControls .time-btn'));
@@ -139,6 +190,15 @@ const sensors = new Map();
         const monitorMinutesPlus = document.getElementById('monitorMinutesPlus');
         const monitorMinutesLabel = document.getElementById('monitorMinutesLabel');
         const monitorSmoothToggle = document.getElementById('monitorSmoothToggle');
+        const settingsView = document.getElementById('settingsView');
+        const settingsSignalRInterval = document.getElementById('settingsSignalRInterval');
+        const settingsDbInterval = document.getElementById('settingsDbInterval');
+        const settingsSignalRValue = document.getElementById('settingsSignalRValue');
+        const settingsDbValue = document.getElementById('settingsDbValue');
+        const settingsBleWarningInterval = document.getElementById('settingsBleWarningInterval');
+        const settingsBleWarningValue = document.getElementById('settingsBleWarningValue');
+        const settingsSaveButton = document.getElementById('settingsSaveButton');
+        const settingsStatus = document.getElementById('settingsStatus');
 
         let currentView = 'home';
         let graphRefreshTimer = null;
@@ -157,6 +217,10 @@ const sensors = new Map();
         let monitorSmoothingWindowMinutes = 5;
         let lastGraphError = false;
         let lastExternalError = false;
+        let settingsSnapshot = null;
+        const settingsMinSeconds = 30;
+        const settingsMaxSeconds = 15 * 60;
+        const settingsStepSeconds = 30;
 
         function setView(view) {
             currentView = view;
@@ -164,24 +228,27 @@ const sensors = new Map();
             const isGraph = view === 'graph';
             const isFlow = view === 'flow';
             const isMonitor = view === 'monitor';
+            const isSettings = view === 'settings';
             homeView.style.display = isHome ? 'block' : 'none';
             graphView.style.display = isGraph ? 'flex' : 'none';
             flowView.style.display = isFlow ? 'flex' : 'none';
             monitorView.style.display = isMonitor ? 'flex' : 'none';
+            settingsView.style.display = isSettings ? 'flex' : 'none';
             homeViewButton.classList.toggle('active', isHome);
             graphViewButton.classList.toggle('active', isGraph);
             flowViewButton.classList.toggle('active', isFlow);
             monitorViewButton.classList.toggle('active', isMonitor);
+            settingsViewButton.classList.toggle('active', isSettings);
             graphControls.style.display = isGraph ? 'flex' : 'none';
             flowControls.style.display = isFlow ? 'flex' : 'none';
             timeButtons.forEach(btn => {
-                btn.disabled = isHome || isFlow || isMonitor;
+                btn.disabled = isHome || isFlow || isMonitor || isSettings;
             });
             smoothButtons.forEach(btn => {
-                btn.disabled = isHome || isFlow || isMonitor;
+                btn.disabled = isHome || isFlow || isMonitor || isSettings;
             });
-            smoothMinus.disabled = isHome || isFlow || isMonitor;
-            smoothPlus.disabled = isHome || isFlow || isMonitor;
+            smoothMinus.disabled = isHome || isFlow || isMonitor || isSettings;
+            smoothPlus.disabled = isHome || isFlow || isMonitor || isSettings;
             flowTimeButtons.forEach(btn => {
                 btn.disabled = !isFlow;
             });
@@ -190,11 +257,14 @@ const sensors = new Map();
             });
             flowSmoothMinus.disabled = !isFlow;
             flowSmoothPlus.disabled = !isFlow;
-            if (isHome) {
+            if (isHome || isSettings) {
                 stopGraphRefresh();
             } else {
                 loadGraphData();
                 startGraphRefresh(isMonitor ? monitorGraph.refreshIntervalMs : graphRefreshIntervalMs);
+            }
+            if (isSettings) {
+                loadIntervalSettings();
             }
         }
 
@@ -202,6 +272,7 @@ const sensors = new Map();
         graphViewButton.addEventListener('click', () => setView('graph'));
         flowViewButton.addEventListener('click', () => setView('flow'));
         monitorViewButton.addEventListener('click', () => setView('monitor'));
+        settingsViewButton.addEventListener('click', () => setView('settings'));
         timeButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const hours = Number.parseInt(button.dataset.hours ?? '24', 10);
@@ -238,6 +309,18 @@ const sensors = new Map();
         monitorMinutesMinus.addEventListener('click', () => setMonitorWindowMinutes(monitorWindowMinutes - monitorStepMinutes));
         monitorMinutesPlus.addEventListener('click', () => setMonitorWindowMinutes(monitorWindowMinutes + monitorStepMinutes));
         monitorSmoothToggle.addEventListener('click', () => toggleMonitorSmoothing());
+        if (settingsSignalRInterval) {
+            settingsSignalRInterval.addEventListener('input', updateSettingsLabels);
+        }
+        if (settingsDbInterval) {
+            settingsDbInterval.addEventListener('input', updateSettingsLabels);
+        }
+        if (settingsBleWarningInterval) {
+            settingsBleWarningInterval.addEventListener('input', updateSettingsLabels);
+        }
+        if (settingsSaveButton) {
+            settingsSaveButton.addEventListener('click', saveIntervalSettings);
+        }
 
         function initializeFlowEnergyStart() {
             const defaultStart = getDefaultFlowEnergyStart();
@@ -355,6 +438,130 @@ const sensors = new Map();
         function updateMonitorSmoothingUi() {
             monitorSmoothToggle.textContent = monitorSmoothingEnabled ? 'Glättung: An' : 'Glättung: Aus';
             monitorSmoothToggle.classList.toggle('active', monitorSmoothingEnabled);
+        }
+
+        function formatIntervalLabel(seconds) {
+            if (!Number.isFinite(seconds)) {
+                return 'n/a';
+            }
+            if (seconds % 60 === 0) {
+                const minutes = seconds / 60;
+                return `${minutes} min`;
+            }
+            return `${seconds} s`;
+        }
+
+        function formatMinutesLabel(seconds) {
+            if (!Number.isFinite(seconds)) {
+                return 'n/a';
+            }
+            const minutes = Math.round((seconds / 60) * 10) / 10;
+            return `${minutes} min`;
+        }
+
+        function applySettingsToUi(snapshot) {
+            if (!snapshot || !settingsSignalRInterval || !settingsDbInterval || !settingsBleWarningInterval) {
+                return;
+            }
+            settingsSnapshot = snapshot;
+            settingsSignalRInterval.min = `${snapshot.minSeconds ?? settingsMinSeconds}`;
+            settingsSignalRInterval.max = `${snapshot.maxSeconds ?? settingsMaxSeconds}`;
+            settingsSignalRInterval.step = `${snapshot.stepSeconds ?? settingsStepSeconds}`;
+            settingsSignalRInterval.value = `${snapshot.signalRSeconds ?? settingsMinSeconds}`;
+            settingsDbInterval.value = `${snapshot.dbSeconds ?? settingsMinSeconds}`;
+            settingsBleWarningInterval.min = `${snapshot.minSeconds ?? settingsMinSeconds}`;
+            settingsBleWarningInterval.max = `${snapshot.maxSeconds ?? settingsMaxSeconds}`;
+            settingsBleWarningInterval.step = `${snapshot.stepSeconds ?? settingsStepSeconds}`;
+            settingsBleWarningInterval.value = `${snapshot.bleWarningSeconds ?? settingsMinSeconds}`;
+            updateSettingsLabels();
+        }
+
+        function updateSettingsLabels() {
+            if (!settingsSignalRInterval || !settingsDbInterval || !settingsBleWarningInterval) {
+                return;
+            }
+            const signalRValue = Number.parseInt(settingsSignalRInterval.value, 10);
+            const dbValue = Number.parseInt(settingsDbInterval.value, 10);
+            const bleWarningValue = Number.parseInt(settingsBleWarningInterval.value, 10);
+            if (settingsSignalRValue) {
+                settingsSignalRValue.textContent = formatIntervalLabel(signalRValue);
+            }
+            if (settingsDbValue) {
+                settingsDbValue.textContent = `${formatIntervalLabel(dbValue)} (fix)`;
+            }
+            if (settingsBleWarningValue) {
+                settingsBleWarningValue.textContent = formatMinutesLabel(bleWarningValue);
+            }
+
+            const isDirty = !!settingsSnapshot
+                && (signalRValue !== settingsSnapshot.signalRSeconds
+                    || bleWarningValue !== settingsSnapshot.bleWarningSeconds);
+            if (settingsSaveButton) {
+                settingsSaveButton.disabled = !isDirty;
+            }
+            if (settingsStatus && isDirty) {
+                settingsStatus.textContent = 'Ungespeicherte Aenderungen';
+            } else if (settingsStatus && !isDirty) {
+                settingsStatus.textContent = '';
+            }
+        }
+
+        async function loadIntervalSettings() {
+            if (!settingsSignalRInterval || !settingsDbInterval) {
+                return;
+            }
+            try {
+                if (settingsStatus) {
+                    settingsStatus.textContent = 'Lade...';
+                }
+                const response = await fetch('/config/intervals');
+                if (!response.ok) {
+                    throw new Error('Intervalle konnten nicht geladen werden');
+                }
+                const snapshot = await response.json();
+                applySettingsToUi(snapshot);
+                if (settingsStatus) {
+                    settingsStatus.textContent = '';
+                }
+            } catch (error) {
+                console.error('Settings Error:', error);
+                if (settingsStatus) {
+                    settingsStatus.textContent = 'Fehler beim Laden';
+                }
+            }
+        }
+
+        async function saveIntervalSettings() {
+            if (!settingsSignalRInterval || !settingsDbInterval || !settingsBleWarningInterval) {
+                return;
+            }
+            try {
+                if (settingsStatus) {
+                    settingsStatus.textContent = 'Speichere...';
+                }
+                const payload = {
+                    signalRSeconds: Number.parseInt(settingsSignalRInterval.value, 10),
+                    bleWarningSeconds: Number.parseInt(settingsBleWarningInterval.value, 10)
+                };
+                const response = await fetch('/config/intervals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) {
+                    throw new Error('Intervalle konnten nicht gespeichert werden');
+                }
+                const snapshot = await response.json();
+                applySettingsToUi(snapshot);
+                if (settingsStatus) {
+                    settingsStatus.textContent = 'Gespeichert';
+                }
+            } catch (error) {
+                console.error('Settings Error:', error);
+                if (settingsStatus) {
+                    settingsStatus.textContent = 'Fehler beim Speichern';
+                }
+            }
         }
 
         updateMonitorSmoothingUi();
@@ -1354,12 +1561,16 @@ const sensors = new Map();
             sensors.set(data.deviceMac, data);
             updateDisplay();
         });
+        connection.on("bleStatus", (data) => {
+            updateBleSignalStatus(data);
+        });
 
         connection.start()
             .then(() => {
                 setConnectionState('ok', 'Verbunden mit Backend');
                 setShutdownEnabled(true);
                 loadBleAdapterStatus();
+                loadBleSignalStatus();
             })
             .catch(err => {
                 setConnectionState('error', 'Verbindung fehlgeschlagen');
@@ -1376,6 +1587,7 @@ const sensors = new Map();
             setConnectionState('ok', 'Verbunden mit Backend');
             setShutdownEnabled(true);
             loadBleAdapterStatus();
+            loadBleSignalStatus();
         });
 
         function updateDisplay() {

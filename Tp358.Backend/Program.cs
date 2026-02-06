@@ -19,6 +19,7 @@ internal static class BackendHost
         builder.Services.AddSignalR();
 
         builder.Services.AddSingleton<DatabaseService>();
+        builder.Services.AddSingleton<IntervalSettingsStore>();
 
         builder.Services.AddSingleton<IAdvertisementSource>(sp =>
         {
@@ -80,6 +81,10 @@ internal static class BackendHost
 
             return Results.Ok(new { adapter = adapterLabel });
         });
+        app.MapGet("/status/ble/activity", (ScannerWorker worker) =>
+        {
+            return Results.Ok(worker.GetBleActivityStatus());
+        });
         app.MapGet("/config/devices", (IConfiguration config) =>
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -94,6 +99,21 @@ internal static class BackendHost
                 map[mac.Trim()] = name.Trim();
             }
             return Results.Ok(map);
+        });
+        app.MapGet("/config/intervals", (IntervalSettingsStore store) =>
+        {
+            return Results.Ok(store.Get());
+        });
+        app.MapPost("/config/intervals", async (HttpRequest request, IntervalSettingsStore store) =>
+        {
+            var update = await request.ReadFromJsonAsync<IntervalUpdateRequest>();
+            if (update is null)
+            {
+                return Results.BadRequest(new { error = "Invalid payload" });
+            }
+
+            var snapshot = store.Update(update);
+            return Results.Ok(snapshot);
         });
 
         app.MapGet("/live/data", (ScannerWorker worker) =>
