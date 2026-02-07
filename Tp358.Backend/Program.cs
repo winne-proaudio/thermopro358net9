@@ -55,6 +55,9 @@ internal static class BackendHost
 
         app.UseStaticFiles();
 
+        var startupLogger = app.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(BackendHost).FullName!);
+
         // Initialize database (optional)
         var dbService = app.Services.GetRequiredService<DatabaseService>();
         try
@@ -66,6 +69,10 @@ internal static class BackendHost
             var logger = app.Services.GetRequiredService<ILogger<DatabaseService>>();
             logger.LogWarning(ex, "Datenbank konnte nicht initialisiert werden. Backend läuft ohne Datenbankanbindung weiter.");
         }
+
+        await dbService.LogDbServerInfoAsync();
+
+        startupLogger.LogInformation("Backend gestartet. Urls: {Urls}.", string.Join(", ", app.Urls));
 
         app.MapGet("/", () =>
             Results.Text("TP358 Backend läuft. Endpoints: /health, /live/data, /BackendMonitor, SignalR: /live", "text/plain; charset=utf-8"));
@@ -84,6 +91,14 @@ internal static class BackendHost
         app.MapGet("/status/ble/activity", (ScannerWorker worker) =>
         {
             return Results.Ok(worker.GetBleActivityStatus());
+        });
+        app.MapGet("/status/db", (DatabaseService databaseService) =>
+        {
+            return Results.Ok(new
+            {
+                esp32Host = databaseService.Esp32DbHost,
+                tp358Host = databaseService.Tp358DbHost
+            });
         });
         app.MapGet("/config/devices", (IConfiguration config) =>
         {
@@ -151,6 +166,16 @@ internal static class BackendHost
 
             var measurements = await databaseService.GetTemperatureMeasurementsAsync(from, to, cancellationToken);
             return Results.Ok(measurements);
+        });
+        app.MapGet("/measurements/temperature/stats", async (DatabaseService databaseService, CancellationToken cancellationToken) =>
+        {
+            if (!databaseService.IsAvailable)
+            {
+                return Results.StatusCode(503);
+            }
+
+            var stats = await databaseService.GetTemperatureStatsAsync(cancellationToken);
+            return Results.Ok(stats);
         });
 
         app.MapGet("/measurements/external", async (DatabaseService databaseService, int? hours, CancellationToken cancellationToken) =>

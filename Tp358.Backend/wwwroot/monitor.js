@@ -68,6 +68,8 @@ const sensors = new Map();
         const bleAdapterStatus = document.getElementById('bleAdapterStatus');
         const bleSignalDot = document.getElementById('bleSignalDot');
         const bleSignalStatus = document.getElementById('bleSignalStatus');
+        const dbEsp32Host = document.getElementById('dbEsp32Host');
+        const dbTp358Host = document.getElementById('dbTp358Host');
 
         function setConnectionState(state, message) {
             statusIndicator.classList.remove('is-ok', 'is-warn', 'is-error');
@@ -91,6 +93,7 @@ const sensors = new Map();
         if (bleAdapterStatus) {
             bleAdapterStatus.style.display = 'inline-flex';
         }
+        loadDbStatus();
 
         async function loadBleAdapterStatus() {
             if (!bleAdapterStatus) {
@@ -123,6 +126,27 @@ const sensors = new Map();
                 updateBleSignalStatus(data);
             } catch (error) {
                 console.warn('BLE-Aktivitaet konnte nicht geladen werden:', error);
+            }
+        }
+
+        async function loadDbStatus() {
+            if (!dbEsp32Host || !dbTp358Host) {
+                return;
+            }
+            try {
+                const response = await fetch('/status/db');
+                if (!response.ok) {
+                    throw new Error('DB-Status konnte nicht geladen werden');
+                }
+                const data = await response.json();
+                const esp32Host = data.esp32Host || 'n/a';
+                const tp358Host = data.tp358Host || 'n/a';
+                dbEsp32Host.textContent = `DB-esp32: ${esp32Host}`;
+                dbTp358Host.textContent = `DB-tp358: ${tp358Host}`;
+            } catch (error) {
+                dbEsp32Host.textContent = 'DB-esp32: n/a';
+                dbTp358Host.textContent = 'DB-tp358: n/a';
+                console.warn('DB-Status konnte nicht geladen werden:', error);
             }
         }
 
@@ -1878,6 +1902,7 @@ const sensors = new Map();
             .then(() => {
                 setConnectionState('ok', 'Verbunden mit Backend');
                 setShutdownEnabled(true);
+                loadDbStatus();
                 loadBleAdapterStatus();
                 loadBleSignalStatus();
             })
@@ -1895,6 +1920,7 @@ const sensors = new Map();
         connection.onreconnected(() => {
             setConnectionState('ok', 'Verbunden mit Backend');
             setShutdownEnabled(true);
+            loadDbStatus();
             loadBleAdapterStatus();
             loadBleSignalStatus();
         });

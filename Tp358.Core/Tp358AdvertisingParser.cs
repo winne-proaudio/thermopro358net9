@@ -2,6 +2,12 @@ namespace Tp358.Core;
 
 public static class Tp358AdvertisingParser
 {
+    private static readonly bool ParserTraceEnabled =
+        string.Equals(Environment.GetEnvironmentVariable("TP358_PARSER_TRACE"), "1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Environment.GetEnvironmentVariable("TP358_PARSER_TRACE"), "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Environment.GetEnvironmentVariable("TP358_PARSER_TRACE"), "yes", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Environment.GetEnvironmentVariable("TP358_PARSER_TRACE"), "on", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Parses ThermoPro TP358 / TP358S manufacturer payload (bytes AFTER the 16-bit company ID).
     /// Observed payload lengths:
@@ -38,7 +44,10 @@ public static class Tp358AdvertisingParser
         int humidityPercent = d[1];
         
         // Log for debugging
-        System.Console.WriteLine($"[TP358 Parser] CompanyId=0x{companyId:X4}, TempByte=0x{tempByte:X2}={tempByte} → {temperatureC}°C, HumidityByte=0x{d[1]:X2}={d[1]} → {humidityPercent}%");
+        if (ParserTraceEnabled)
+        {
+            System.Console.WriteLine($"[TP358 Parser] CompanyId=0x{companyId:X4}, TempByte=0x{tempByte:X2}={tempByte} -> {temperatureC}°C, HumidityByte=0x{d[1]:X2}={d[1]} -> {humidityPercent}%");
+        }
 
         int? battery = TryDecodeBatteryStatusTp358(d);
 

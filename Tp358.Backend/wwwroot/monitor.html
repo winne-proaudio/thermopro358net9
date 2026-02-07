@@ -12,11 +12,19 @@
 
         <div class="status">
             <div class="status-left">
-                <div class="status-indicator"></div>
-                <span id="connectionStatus">Backend</span>
-                <span id="bleAdapterStatus" class="status-adapter">BLE: n/a</span>
-                <span id="bleSignalDot" class="ble-status-dot is-unknown" title="BLE Status"></span>
-                <span id="bleSignalStatus" class="status-warning" style="display: none;"></span>
+                <div class="status-line status-line-main">
+                    <div class="status-indicator"></div>
+                    <span id="connectionStatus">Backend</span>
+                </div>
+                <div class="status-line status-line-ble">
+                    <span id="bleAdapterStatus" class="status-adapter">BLE: n/a</span>
+                    <span id="bleSignalDot" class="ble-status-dot is-unknown" title="BLE Status"></span>
+                    <span id="bleSignalStatus" class="status-warning" style="display: none;"></span>
+                </div>
+            </div>
+            <div class="status-db">
+                <span id="dbEsp32Host" class="status-db-line">DB-esp32: n/a</span>
+                <span id="dbTp358Host" class="status-db-line">DB-tp358: n/a</span>
             </div>
             <div class="status-actions">
                 <div class="status-actions-left">

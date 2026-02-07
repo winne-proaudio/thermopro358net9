@@ -3,14 +3,24 @@ using Tp358.Ble.Abstractions;
 
 namespace Tp358.Backend;
 
-public sealed class FallbackAdvertisementSource(
-    IAdvertisementSource primary,
-    IAdvertisementSource fallback,
-    ILogger<FallbackAdvertisementSource> logger
-) : IAdvertisementSource
+public sealed class FallbackAdvertisementSource : IAdvertisementSource
 {
-    public IAdvertisementSource Primary { get; } = primary;
-    public IAdvertisementSource Fallback { get; } = fallback;
+    private readonly IAdvertisementSource _primary;
+    private readonly IAdvertisementSource _fallback;
+    private readonly ILogger<FallbackAdvertisementSource> _logger;
+
+    public IAdvertisementSource Primary => _primary;
+    public IAdvertisementSource Fallback => _fallback;
+
+    public FallbackAdvertisementSource(
+        IAdvertisementSource primary,
+        IAdvertisementSource fallback,
+        ILogger<FallbackAdvertisementSource> logger)
+    {
+        _primary = primary;
+        _fallback = fallback;
+        _logger = logger;
+    }
 
     public async IAsyncEnumerable<AdvertisementFrame> WatchAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
@@ -20,24 +30,24 @@ public sealed class FallbackAdvertisementSource(
         {
             try
             {
-                await foreach (var frame in primary.WatchAsync(ct))
+                await foreach (var frame in _primary.WatchAsync(ct))
                 {
                     await channel.Writer.WriteAsync(frame, ct);
                 }
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                logger.LogWarning(ex, "Primary BLE source failed; switching to fallback.");
+                _logger.LogWarning(ex, "Primary BLE source failed; switching to fallback.");
                 try
                 {
-                    await foreach (var frame in fallback.WatchAsync(ct))
+                    await foreach (var frame in _fallback.WatchAsync(ct))
                     {
                         await channel.Writer.WriteAsync(frame, ct);
                     }
                 }
                 catch (Exception innerEx) when (!ct.IsCancellationRequested)
                 {
-                    logger.LogWarning(innerEx, "Fallback BLE source failed.");
+                    _logger.LogWarning(innerEx, "Fallback BLE source failed.");
                 }
             }
             finally
