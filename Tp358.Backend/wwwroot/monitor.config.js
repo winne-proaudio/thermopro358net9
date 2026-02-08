@@ -1,7 +1,7 @@
 const deviceColors = ['#ef4444', '#3b82f6', '#10b981', '#f97316', '#6366f1', '#14b8a6', '#f43f5e', '#0ea5e9'];
 const externalGraph = {
     name: 'ESP32',
-    minTemp: 32,
+    minTemp: 25,
     maxTemp: 48,
     delta: {
         startThreshold: 38,
