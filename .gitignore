@@ -1,4 +1,8 @@
-﻿/Tp358.Backend/obj/Debug/net9.0/.NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+# =========================
+# Local .NET SDK (project-scoped)
+# =========================
+.dotnet/
+
 # =========================
 # .NET / C# (Rider + Windows/Linux)
 # =========================
