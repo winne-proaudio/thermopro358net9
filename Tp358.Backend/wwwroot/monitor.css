@@ -155,7 +155,7 @@
 
         .sensors-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
             margin-bottom: 20px;
         }
@@ -163,13 +163,55 @@
         .sensor-card {
             background: white;
             border-radius: 15px;
-            padding: 25px;
+            padding: 15px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
             transition: transform 0.2s;
         }
 
         .sensor-card:hover {
             transform: translateY(-5px);
+        }
+
+        .sensor-card--summary {
+            padding: 12px;
+            font-size: 0.8em;
+        }
+
+        .summary-header,
+        .summary-row {
+            display: grid;
+            grid-template-columns: 1fr 60px 60px;
+            align-items: center;
+            column-gap: 8px;
+        }
+
+        .summary-header {
+            font-size: 0.85em;
+            font-weight: 700;
+            color: #6b7280;
+            margin-bottom: 6px;
+        }
+
+        .summary-title {
+            color: #111827;
+        }
+
+        .summary-body {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            line-height: 1.05;
+        }
+
+        .summary-name {
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .summary-col,
+        .summary-cell {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
         }
 
         .sensor-header {

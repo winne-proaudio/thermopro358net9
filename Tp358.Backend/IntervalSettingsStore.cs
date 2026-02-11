@@ -21,7 +21,7 @@ public sealed class IntervalSettingsStore
     private const int MinSeconds = 30;
     private const int MaxSeconds = 15 * 60;
     private const int StepSeconds = 30;
-    private const int FixedDbSeconds = 5 * 60;
+    private const int FixedDbSeconds = 3 * 60;
 
     private readonly object _sync = new();
     private readonly ILogger<IntervalSettingsStore> _logger;

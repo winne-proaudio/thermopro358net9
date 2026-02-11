@@ -1,4 +1,6 @@
-const deviceColors = ['#ef4444', '#3b82f6', '#10b981', '#f97316', '#6366f1', '#14b8a6', '#f43f5e', '#0ea5e9'];
+// Reihenfolge passend zu preferredDeviceOrder in monitor.js:
+// Wohnzimmer, Winni, Marie, Plantage, Bad, Corri, Küche, (Reserve)
+const deviceColors = ['#ef4444', '#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#facc15', '#ec4899', '#0ea5e9'];
 const externalGraph = {
     name: 'ESP32',
     minTemp: 25,

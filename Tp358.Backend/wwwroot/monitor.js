@@ -1,6 +1,117 @@
 const sensors = new Map();
 
         let deviceNames = {};
+        const preferredDeviceOrder = [
+            'Katzenzimmer',
+            'Winni',
+            'Marie',
+            'Plantage',
+            'Bad',
+            'Corri',
+            'Küche'
+        ];
+        const preferredDeviceOrderIndex = new Map(
+            preferredDeviceOrder.map((name, index) => [name.trim().toLowerCase(), index])
+        );
+        const dynamicTempPadding = 2;
+
+        function normalizeDeviceName(name) {
+            if (!name) {
+                return '';
+            }
+            return name.toString().trim().toLowerCase();
+        }
+
+        function getPreferredOrderIndex(deviceName) {
+            if (!deviceName) {
+                return Number.POSITIVE_INFINITY;
+            }
+            const key = normalizeDeviceName(deviceName);
+            return preferredDeviceOrderIndex.get(key) ?? Number.POSITIVE_INFINITY;
+        }
+
+        function isEsp32DeviceName(deviceName) {
+            if (!deviceName) {
+                return false;
+            }
+            return deviceName.toString().toLowerCase().includes('esp32');
+        }
+
+        function compareDeviceOrder(macA, macB) {
+            const nameA = getDeviceName(macA);
+            const nameB = getDeviceName(macB);
+            const espA = isEsp32DeviceName(nameA);
+            const espB = isEsp32DeviceName(nameB);
+            if (espA !== espB) {
+                return espA ? 1 : -1;
+            }
+            const orderA = getPreferredOrderIndex(nameA);
+            const orderB = getPreferredOrderIndex(nameB);
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            const nameCompare = nameA.localeCompare(nameB, 'de');
+            if (nameCompare !== 0) {
+                return nameCompare;
+            }
+            return macA.localeCompare(macB);
+        }
+
+        function getTempRangeFromPoints(points, fallbackMin, fallbackMax, padding = dynamicTempPadding) {
+            let min = null;
+            let max = null;
+            points.forEach(point => {
+                const temp = point?.temp;
+                if (!Number.isFinite(temp)) {
+                    return;
+                }
+                if (min === null || temp < min) {
+                    min = temp;
+                }
+                if (max === null || temp > max) {
+                    max = temp;
+                }
+            });
+            if (min === null || max === null) {
+                return { minTemp: fallbackMin, maxTemp: fallbackMax };
+            }
+            let minTemp = min - padding;
+            let maxTemp = max + padding;
+            if (minTemp === maxTemp) {
+                minTemp -= 1;
+                maxTemp += 1;
+            }
+            return { minTemp, maxTemp };
+        }
+
+        function getTempRangeFromSeriesList(seriesList, fallbackMin, fallbackMax, padding = dynamicTempPadding) {
+            let min = null;
+            let max = null;
+            seriesList.forEach(series => {
+                (series?.points || []).forEach(point => {
+                    const temp = point?.temp;
+                    if (!Number.isFinite(temp)) {
+                        return;
+                    }
+                    if (min === null || temp < min) {
+                        min = temp;
+                    }
+                    if (max === null || temp > max) {
+                        max = temp;
+                    }
+                });
+            });
+            if (min === null || max === null) {
+                return { minTemp: fallbackMin, maxTemp: fallbackMax };
+            }
+            let minTemp = min - padding;
+            let maxTemp = max + padding;
+            if (minTemp === maxTemp) {
+                minTemp -= 1;
+                maxTemp += 1;
+            }
+            return { minTemp, maxTemp };
+        }
 
         function normalizeMac(mac) {
             if (!mac) {
@@ -52,15 +163,7 @@ const sensors = new Map();
             if (macs.size === 0) {
                 return Object.keys(deviceNames);
             }
-            return Array.from(macs).sort((a, b) => {
-                const nameA = getDeviceName(a);
-                const nameB = getDeviceName(b);
-                const nameCompare = nameA.localeCompare(nameB, 'de');
-                if (nameCompare !== 0) {
-                    return nameCompare;
-                }
-                return a.localeCompare(b);
-            });
+            return Array.from(macs).sort(compareDeviceOrder);
         }
 
         const statusIndicator = document.querySelector('.status-indicator');
@@ -931,6 +1034,54 @@ const sensors = new Map();
             const timeRange = getTimeRange(graphConfig.hours);
 
             const graphDeviceOrder = getGraphDeviceOrder(seriesByDevice);
+            const allDeviceOrder = graphDeviceOrder.filter(mac => {
+                const name = getDeviceName(mac);
+                return getPreferredOrderIndex(name) !== Number.POSITIVE_INFINITY;
+            });
+            if (allDeviceOrder.length > 0) {
+                const allRow = document.createElement('div');
+                allRow.className = 'graph-row';
+
+                const allTitle = document.createElement('div');
+                allTitle.className = 'graph-title graph-title--sensor';
+
+                const allTitleLeft = document.createElement('div');
+                allTitleLeft.className = 'graph-title-left';
+                allTitleLeft.textContent = 'All';
+
+                const allTitleCenter = document.createElement('div');
+                allTitleCenter.className = 'graph-title-center';
+
+                const allTitleLatest = document.createElement('div');
+                allTitleLatest.className = 'graph-title-latest';
+
+                const allCanvas = document.createElement('canvas');
+                allCanvas.className = 'graph-canvas';
+
+                allTitle.appendChild(allTitleLeft);
+                allTitle.appendChild(allTitleCenter);
+                allTitle.appendChild(allTitleLatest);
+                allRow.appendChild(allTitle);
+                allRow.appendChild(allCanvas);
+                graphContainer.appendChild(allRow);
+
+                const allSeriesList = allDeviceOrder.map(mac => {
+                    const points = (seriesByDevice.get(mac) || []).slice().sort((a, b) => a.time - b.time);
+                    const smoothedPoints = applySmoothing(points, smoothingMode, smoothingWindowMinutes);
+                    const visiblePoints = filterPointsByRange(smoothedPoints, timeRange);
+                    const name = getDeviceName(mac);
+                    const colorIndex = getPreferredOrderIndex(name);
+                    const color = Number.isFinite(colorIndex)
+                        ? deviceColors[colorIndex % deviceColors.length]
+                        : deviceColors[0];
+                    return { label: name, color, points: visiblePoints };
+                });
+                if (allSeriesList.some(series => series.points.length > 0)) {
+                    hasData = true;
+                }
+                const allRange = getTempRangeFromSeriesList(allSeriesList, graphConfig.minTemp, graphConfig.maxTemp);
+                drawGraphMulti(allCanvas, allSeriesList, allRange.minTemp, allRange.maxTemp, timeRange, graphConfig.rowHeight);
+            }
             graphDeviceOrder.forEach((mac, index) => {
                 const row = document.createElement('div');
                 row.className = 'graph-row';
@@ -964,6 +1115,8 @@ const sensors = new Map();
                     hasData = true;
                 }
                 const color = deviceColors[index % deviceColors.length];
+                let minTemp = graphConfig.minTemp;
+                let maxTemp = graphConfig.maxTemp;
                 if (visiblePoints.length > 0) {
                     const temps = visiblePoints.map(point => point.temp);
                     const min = Math.min(...temps);
@@ -971,11 +1124,14 @@ const sensors = new Map();
                     const latest = visiblePoints[visiblePoints.length - 1].temp;
                     titleCenter.textContent = `Min: ${min.toFixed(1)} °C · Max: ${max.toFixed(1)} °C`;
                     titleLatest.innerHTML = `<span class="latest-item" style="color:${color}">${latest.toFixed(1)} °C</span>`;
+                    const range = getTempRangeFromPoints(visiblePoints, graphConfig.minTemp, graphConfig.maxTemp);
+                    minTemp = range.minTemp;
+                    maxTemp = range.maxTemp;
                 } else {
                     titleCenter.textContent = 'Min: n/a · Max: n/a';
                     titleLatest.innerHTML = '<span class="latest-item">n/a</span>';
                 }
-                drawGraph(canvas, visiblePoints, color, graphConfig.minTemp, graphConfig.maxTemp, timeRange, graphConfig.rowHeight);
+                drawGraph(canvas, visiblePoints, color, minTemp, maxTemp, timeRange, graphConfig.rowHeight);
             });
 
             const externalRow = document.createElement('div');
@@ -1030,7 +1186,8 @@ const sensors = new Map();
             externalTitle.appendChild(externalTitleLeft);
             externalTitle.appendChild(externalTitleCenter);
             externalTitle.appendChild(externalTitleLatest);
-            drawGraphMulti(externalCanvas, externalSeriesList, externalGraph.minTemp, externalGraph.maxTemp, timeRange, graphConfig.rowHeight);
+            const externalRange = getTempRangeFromSeriesList(externalSeriesList, externalGraph.minTemp, externalGraph.maxTemp);
+            drawGraphMulti(externalCanvas, externalSeriesList, externalRange.minTemp, externalRange.maxTemp, timeRange, graphConfig.rowHeight);
 
             graphNoData.style.display = hasData ? 'none' : 'block';
             graphNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
@@ -1101,7 +1258,8 @@ const sensors = new Map();
             title.appendChild(titleEnergy);
             title.appendChild(titleLatest);
 
-            drawGraphMulti(canvas, seriesList, flowGraph.minTemp, flowGraph.maxTemp, timeRange, flowGraph.rowHeight);
+            const flowRange = getTempRangeFromSeriesList(seriesList, flowGraph.minTemp, flowGraph.maxTemp);
+            drawGraphMulti(canvas, seriesList, flowRange.minTemp, flowRange.maxTemp, timeRange, flowGraph.rowHeight);
 
             flowNoData.style.display = hasData ? 'none' : 'block';
             flowNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
@@ -1174,7 +1332,8 @@ const sensors = new Map();
             title.appendChild(titleEnergy);
             title.appendChild(titleLatest);
 
-            drawGraphMulti(canvas, seriesList, oldFlowGraph.minTemp, oldFlowGraph.maxTemp, timeRange, oldFlowGraph.rowHeight);
+            const oldFlowRange = getTempRangeFromSeriesList(seriesList, oldFlowGraph.minTemp, oldFlowGraph.maxTemp);
+            drawGraphMulti(canvas, seriesList, oldFlowRange.minTemp, oldFlowRange.maxTemp, timeRange, oldFlowGraph.rowHeight);
 
             oldFlowNoData.style.display = hasData ? 'none' : 'block';
             oldFlowNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
@@ -1241,7 +1400,8 @@ const sensors = new Map();
             title.appendChild(titleCenter);
             title.appendChild(titleLatest);
 
-            drawGraphMulti(canvas, seriesList, monitorGraph.minTemp, monitorGraph.maxTemp, timeRange, monitorGraph.rowHeight, !monitorSmoothingEnabled);
+            const monitorRange = getTempRangeFromSeriesList(seriesList, monitorGraph.minTemp, monitorGraph.maxTemp);
+            drawGraphMulti(canvas, seriesList, monitorRange.minTemp, monitorRange.maxTemp, timeRange, monitorGraph.rowHeight, !monitorSmoothingEnabled);
 
             monitorNoData.style.display = hasData ? 'none' : 'block';
             monitorNoData.textContent = hadError ? 'Fehler beim Laden der Messwerte.' : 'Keine Messwerte in der Datenbank gefunden.';
@@ -1449,7 +1609,9 @@ const sensors = new Map();
             ctx.font = '10px sans-serif';
             ctx.fillStyle = '#6b7280';
 
-            for (let t = minTemp; t <= maxTemp; t += 1) {
+            const tickStart = Math.ceil(minTemp);
+            const tickEnd = Math.floor(maxTemp);
+            for (let t = tickStart; t <= tickEnd; t += 1) {
                 const y = top + ((maxTemp - t) / range) * plotHeight;
                 ctx.beginPath();
                 ctx.moveTo(left, y);
@@ -1940,7 +2102,18 @@ const sensors = new Map();
 
             container.innerHTML = '';
 
+            const dataByName = new Map();
             sensors.forEach((data, mac) => {
+                const name = getDeviceName(mac);
+                const key = normalizeDeviceName(name);
+                if (key) {
+                    dataByName.set(key, { mac, data, name });
+                }
+            });
+
+            const entries = Array.from(sensors.entries()).sort((a, b) => compareDeviceOrder(a[0], b[0]));
+
+            entries.forEach(([mac, data]) => {
                 const card = document.createElement('div');
                 card.className = 'sensor-card';
 
@@ -1974,25 +2147,46 @@ const sensors = new Map();
                             </div>
                             <div class="data-value humidity">${humidity} %</div>
                         </div>
-                        <div class="data-item">
-                            <div class="data-label">
-                                <span class="icon">🔋</span>
-                                Batterie
-                            </div>
-                            <div class="data-value battery">${battery}</div>
-                        </div>
-                        <div class="data-item">
-                            <div class="data-label">
-                                <span class="icon">📡</span>
-                                Signal
-                            </div>
-                            <div class="data-value signal">${rssi} dBm</div>
-                        </div>
                     </div>
                 `;
 
                 container.appendChild(card);
             });
+
+            const summaryCard = document.createElement('div');
+            summaryCard.className = 'sensor-card sensor-card--summary';
+
+            const summaryHeader = document.createElement('div');
+            summaryHeader.className = 'summary-header';
+            summaryHeader.innerHTML = `
+                <div class="summary-title">Batterie & Signal</div>
+                <div class="summary-col">🔋</div>
+                <div class="summary-col">📡</div>
+            `;
+
+            const summaryBody = document.createElement('div');
+            summaryBody.className = 'summary-body';
+
+            preferredDeviceOrder.forEach(name => {
+                const key = normalizeDeviceName(name);
+                const entry = dataByName.get(key);
+                const battery = entry ? formatBattery(entry.data) : 'n/a';
+                const rssiValue = entry?.data?.rssi;
+                const rssi = Number.isFinite(rssiValue) ? `${rssiValue} dBm` : 'n/a';
+
+                const row = document.createElement('div');
+                row.className = 'summary-row';
+                row.innerHTML = `
+                    <div class="summary-name">${name}</div>
+                    <div class="summary-cell battery">${battery}</div>
+                    <div class="summary-cell signal">${rssi}</div>
+                `;
+                summaryBody.appendChild(row);
+            });
+
+            summaryCard.appendChild(summaryHeader);
+            summaryCard.appendChild(summaryBody);
+            container.appendChild(summaryCard);
         }
 
         function formatBattery(data) {
