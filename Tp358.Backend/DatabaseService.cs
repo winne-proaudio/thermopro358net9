@@ -320,7 +320,7 @@ public sealed class DatabaseService
             await connection.OpenAsync(cancellationToken);
 
             var selectSql = @"
-                SELECT device_mac, temperature, measured_at
+                SELECT device_mac, temperature, humidity, measured_at
                 FROM measurements
                 WHERE measured_at BETWEEN @from AND @to
                 ORDER BY measured_at ASC;
@@ -335,9 +335,10 @@ public sealed class DatabaseService
             {
                 var deviceMac = reader.GetString(0);
                 double? temperature = reader.IsDBNull(1) ? null : reader.GetDouble(1);
-                var measuredAt = reader.GetDateTime(2);
+                int? humidityPercent = reader.IsDBNull(2) ? null : reader.GetInt32(2);
+                var measuredAt = reader.GetDateTime(3);
 
-                results.Add(new TemperatureMeasurement(deviceMac, temperature, measuredAt));
+                results.Add(new TemperatureMeasurement(deviceMac, temperature, humidityPercent, measuredAt));
             }
 
             _logger.LogInformation("TP358 query returned {Count} rows.", results.Count);
@@ -535,7 +536,7 @@ public sealed class DatabaseService
     }
 }
 
-public sealed record TemperatureMeasurement(string DeviceMac, double? TemperatureC, DateTime MeasuredAt);
+public sealed record TemperatureMeasurement(string DeviceMac, double? TemperatureC, int? HumidityPercent, DateTime MeasuredAt);
 public sealed record TemperatureStats(long Count, DateTime? MinTimestamp, DateTime? MaxTimestamp);
 public sealed record ExternalTemperatureMeasurement(string DeviceId, DateTime Timestamp, double? Temperature);
 public sealed record ExternalTemperatureStats(long Count, DateTime? MinTimestamp, DateTime? MaxTimestamp);

@@ -299,6 +299,7 @@ const sensors = new Map();
         const smoothMinus = document.getElementById('smoothMinus');
         const smoothPlus = document.getElementById('smoothPlus');
         const smoothMinutesLabel = document.getElementById('smoothMinutesLabel');
+        const humidityToggleButton = document.getElementById('humidityToggleButton');
         const flowTimeButtons = Array.from(document.querySelectorAll('#flowControls .flow-time-btn'));
         const flowSmoothButtons = Array.from(document.querySelectorAll('#flowControls .flow-smooth-btn'));
         const flowSmoothMinus = document.getElementById('flowSmoothMinus');
@@ -345,6 +346,7 @@ const sensors = new Map();
         let latestExternalSeries = new Map();
         let smoothingMode = 'A';
         let smoothingWindowMinutes = 2;
+        let graphHumidityVisible = false;
         let flowSmoothingMode = 'A';
         let flowSmoothingWindowMinutes = 2;
         let flowHours = 24;
@@ -399,6 +401,9 @@ const sensors = new Map();
             });
             smoothMinus.disabled = isHome || isFlow || isMonitor || isOldFlow || isSettings;
             smoothPlus.disabled = isHome || isFlow || isMonitor || isOldFlow || isSettings;
+            if (humidityToggleButton) {
+                humidityToggleButton.disabled = !isGraph;
+            }
             flowTimeButtons.forEach(btn => {
                 btn.disabled = !isFlow;
             });
@@ -447,6 +452,11 @@ const sensors = new Map();
                 setSmoothingMode(mode);
             });
         });
+        if (humidityToggleButton) {
+            humidityToggleButton.addEventListener('click', () => {
+                setGraphHumidityVisible(!graphHumidityVisible);
+            });
+        }
         smoothMinus.addEventListener('click', () => setSmoothingMinutes(smoothingWindowMinutes - 1));
         smoothPlus.addEventListener('click', () => setSmoothingMinutes(smoothingWindowMinutes + 1));
         flowTimeButtons.forEach(button => {
@@ -533,6 +543,16 @@ const sensors = new Map();
             });
             if (currentView === 'graph') {
                 renderGraphs(latestGraphSeries, latestExternalSeries);
+            }
+        }
+
+        function setGraphHumidityVisible(visible) {
+            graphHumidityVisible = Boolean(visible);
+            if (humidityToggleButton) {
+                humidityToggleButton.classList.toggle('active', graphHumidityVisible);
+            }
+            if (currentView === 'graph') {
+                renderGraphs(latestGraphSeries, latestExternalSeries, lastGraphError);
             }
         }
 
@@ -927,9 +947,13 @@ const sensors = new Map();
                         if (item.temperatureC === null || item.temperatureC === undefined) {
                             return;
                         }
+                        const humidityPercent = Number.isFinite(item.humidityPercent)
+                            ? item.humidityPercent
+                            : null;
                         grouped.get(item.deviceMac).push({
                             time: parseExternalTimestamp(item.measuredAt),
-                            temp: item.temperatureC
+                            temp: item.temperatureC,
+                            humidity: humidityPercent
                         });
                     });
                 } else {
@@ -1117,6 +1141,7 @@ const sensors = new Map();
                 const color = deviceColors[index % deviceColors.length];
                 let minTemp = graphConfig.minTemp;
                 let maxTemp = graphConfig.maxTemp;
+                let humidityOverlay = null;
                 if (visiblePoints.length > 0) {
                     const temps = visiblePoints.map(point => point.temp);
                     const min = Math.min(...temps);
@@ -1131,7 +1156,30 @@ const sensors = new Map();
                     titleCenter.textContent = 'Min: n/a · Max: n/a';
                     titleLatest.innerHTML = '<span class="latest-item">n/a</span>';
                 }
-                drawGraph(canvas, visiblePoints, color, minTemp, maxTemp, timeRange, graphConfig.rowHeight);
+                if (graphHumidityVisible) {
+                    const humiditySeries = getHumiditySeries(points);
+                    const humiditySmoothed = applySmoothing(humiditySeries, smoothingMode, smoothingWindowMinutes);
+                    const humidityVisible = filterPointsByRange(humiditySmoothed, timeRange);
+                    if (humidityVisible.length > 0) {
+                        const humidityValues = humidityVisible.map(point => point.temp);
+                        const humidityMin = Math.min(...humidityValues);
+                        const humidityMax = Math.max(...humidityValues);
+                        const humidityLatest = humidityVisible[humidityVisible.length - 1].temp;
+                        const humidityRange = getCenteredRangeAroundValue(humidityVisible, 50, 10);
+                        humidityOverlay = {
+                            points: humidityVisible,
+                            minValue: humidityRange.minValue,
+                            maxValue: humidityRange.maxValue,
+                            color: '#000000',
+                            lineDash: [2, 6]
+                        };
+                        titleCenter.textContent += ` · H Min: ${humidityMin.toFixed(0)} % · H Max: ${humidityMax.toFixed(0)} %`;
+                        titleLatest.innerHTML += `<span class="latest-item" style="color:#000000">H: ${humidityLatest.toFixed(0)} %</span>`;
+                    } else {
+                        titleLatest.innerHTML += '<span class="latest-item" style="color:#000000">H: n/a</span>';
+                    }
+                }
+                drawGraph(canvas, visiblePoints, color, minTemp, maxTemp, timeRange, graphConfig.rowHeight, humidityOverlay);
             });
 
             const externalRow = document.createElement('div');
@@ -1502,8 +1550,31 @@ const sensors = new Map();
             return { from, to, totalMs: to - from, minutes: effectiveMinutes };
         }
 
+        function getHumiditySeries(points) {
+            if (!points || points.length === 0) {
+                return [];
+            }
+            return points
+                .filter(point => Number.isFinite(point?.humidity))
+                .map(point => ({ time: point.time, temp: point.humidity }));
+        }
 
-        function drawGraph(canvas, points, color, minTemp, maxTemp, timeRange, rowHeight) {
+        function getCenteredRangeAroundValue(points, centerValue, minHalfRange) {
+            let maxDistance = minHalfRange;
+            points.forEach(point => {
+                const value = point?.temp;
+                if (!Number.isFinite(value)) {
+                    return;
+                }
+                maxDistance = Math.max(maxDistance, Math.abs(value - centerValue));
+            });
+            return {
+                minValue: centerValue - maxDistance,
+                maxValue: centerValue + maxDistance
+            };
+        }
+
+        function drawGraph(canvas, points, color, minTemp, maxTemp, timeRange, rowHeight, overlaySeries) {
             const dpr = window.devicePixelRatio || 1;
             const width = canvas.clientWidth || 800;
             const height = rowHeight ?? graphConfig.rowHeight;
@@ -1517,27 +1588,56 @@ const sensors = new Map();
             ctx.clearRect(0, 0, width, height);
 
             const frame = drawGraphFrame(ctx, width, height, minTemp, maxTemp, timeRange);
+            const hasTempData = points.length > 0;
+            const hasOverlayData = overlaySeries && overlaySeries.points && overlaySeries.points.length > 0;
 
-            if (points.length === 0) {
+            if (!hasTempData && !hasOverlayData) {
                 ctx.fillStyle = '#9ca3af';
                 ctx.fillText('Keine Daten', frame.left + 10, frame.top + 18);
                 return;
             }
 
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            points.forEach((point, index) => {
-                const clampedTemp = Math.min(maxTemp, Math.max(minTemp, point.temp));
-                const x = frame.left + ((point.time - frame.from) / frame.totalMs) * frame.plotWidth;
-                const y = frame.top + ((maxTemp - clampedTemp) / frame.range) * frame.plotHeight;
-                if (index === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
+            if (hasTempData) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                points.forEach((point, index) => {
+                    const clampedTemp = Math.min(maxTemp, Math.max(minTemp, point.temp));
+                    const x = frame.left + ((point.time - frame.from) / frame.totalMs) * frame.plotWidth;
+                    const y = frame.top + ((maxTemp - clampedTemp) / frame.range) * frame.plotHeight;
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                ctx.stroke();
+            }
+
+            if (hasOverlayData) {
+                const overlayMin = overlaySeries.minValue;
+                const overlayMax = overlaySeries.maxValue;
+                const overlayRange = overlayMax - overlayMin;
+                if (Number.isFinite(overlayRange) && overlayRange > 0) {
+                    ctx.save();
+                    ctx.strokeStyle = overlaySeries.color || '#000000';
+                    ctx.lineWidth = 1.6;
+                    ctx.setLineDash(overlaySeries.lineDash || [2, 6]);
+                    ctx.beginPath();
+                    overlaySeries.points.forEach((point, index) => {
+                        const clamped = Math.min(overlayMax, Math.max(overlayMin, point.temp));
+                        const x = frame.left + ((point.time - frame.from) / frame.totalMs) * frame.plotWidth;
+                        const y = frame.top + ((overlayMax - clamped) / overlayRange) * frame.plotHeight;
+                        if (index === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+                    ctx.stroke();
+                    ctx.restore();
                 }
-            });
-            ctx.stroke();
+            }
         }
 
         function drawGraphMulti(canvas, seriesList, minTemp, maxTemp, timeRange, rowHeight, drawRawPoints) {
