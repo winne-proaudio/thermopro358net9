@@ -55,9 +55,6 @@ internal static class BackendHost
 
         app.UseStaticFiles();
 
-        var startupLogger = app.Services.GetRequiredService<ILoggerFactory>()
-            .CreateLogger(typeof(BackendHost).FullName!);
-
         // Initialize database (optional)
         var dbService = app.Services.GetRequiredService<DatabaseService>();
         try
@@ -71,8 +68,11 @@ internal static class BackendHost
         }
 
         await dbService.LogDbServerInfoAsync();
-
-        startupLogger.LogInformation("Backend gestartet. Urls: {Urls}.", string.Join(", ", app.Urls));
+        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        lifetime.ApplicationStarted.Register(() =>
+        {
+            Console.WriteLine("Backend ist gestartet!");
+        });
 
         app.MapGet("/", () =>
             Results.Text("TP358 Backend läuft. Endpoints: /health, /live/data, /BackendMonitor, SignalR: /live", "text/plain; charset=utf-8"));

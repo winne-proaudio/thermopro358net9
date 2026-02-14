@@ -20,6 +20,7 @@ public sealed class ScannerWorker(
     ILogger<ScannerWorker> logger
 ) : BackgroundService
 {
+    private readonly HashSet<string> _knownDevices = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTimeOffset> _lastSignalRSentPerDevice = new();
     private readonly Dictionary<string, DateTimeOffset> _lastDbSavedPerDevice = new();
     private readonly Dictionary<string, Tp358ReadingDto> _latestReadings = new();
@@ -34,35 +35,6 @@ public sealed class ScannerWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var sourceType = source.GetType().FullName ?? source.GetType().Name;
-        var sourceLabel = sourceType.Contains("FakeAdvertisementSource", StringComparison.OrdinalIgnoreCase)
-            ? "FAKE (simuliert)"
-            : sourceType.Contains("BlueZ", StringComparison.OrdinalIgnoreCase)
-                ? "BlueZ (echt)"
-                : sourceType.Contains("WindowsAdvertisementSource", StringComparison.OrdinalIgnoreCase)
-                    ? "Windows BLE (echt)"
-                    : sourceType.Contains("FallbackAdvertisementSource", StringComparison.OrdinalIgnoreCase)
-                        ? "Fallback (echt oder Fake bei Fehlern)"
-                        : sourceType;
-
-        var startTimestamp = DateTimeOffset.Now;
-        if (sourceLabel.StartsWith("FAKE", StringComparison.OrdinalIgnoreCase))
-        {
-            logger.LogWarning("{Timestamp:yyyy-MM-dd HH:mm:ss} BLE-Quelle: {Source}", startTimestamp, sourceLabel);
-        }
-        else
-        {
-            logger.LogInformation("{Timestamp:yyyy-MM-dd HH:mm:ss} BLE-Quelle: {Source}", startTimestamp, sourceLabel);
-        }
-
-        logger.LogInformation("{Timestamp:yyyy-MM-dd HH:mm:ss} ScannerWorker gestartet. Warte auf BLE Advertisements...", startTimestamp);
-        var initial = _intervalSettings.Get();
-        logger.LogInformation(
-            "{Timestamp:yyyy-MM-dd HH:mm:ss} SignalR-Interval: {SignalRSeconds}s pro Gerät, Datenbank-Interval: {DbSeconds}s pro Gerät",
-            startTimestamp,
-            initial.SignalRSeconds,
-            initial.DbSeconds);
-
         var warningTask = RunBleWarningLoopAsync(stoppingToken);
 
         await foreach (var frame in source.WatchAsync(stoppingToken))
@@ -70,14 +42,9 @@ public sealed class ScannerWorker(
             var now = DateTimeOffset.UtcNow;
             Interlocked.Exchange(ref _lastAdvertisementReceivedTicks, now.UtcTicks);
 
-            var payloadHex = BitConverter.ToString(frame.ManufacturerPayload);
-            logger.LogDebug("{Timestamp:yyyy-MM-dd HH:mm:ss} Advertisement empfangen: MAC={Mac}, CompanyId=0x{CompanyId:X4}, Payload Length={Length}, RSSI={Rssi}, Raw={Raw}",
-                DateTimeOffset.Now, frame.DeviceMac, frame.CompanyId, frame.ManufacturerPayload.Length, frame.Rssi, payloadHex);
-
             // Accept both TP358 (4 bytes) and TP358S (5 bytes)
             if (frame.ManufacturerPayload.Length != 4 && frame.ManufacturerPayload.Length != 5)
             {
-                logger.LogDebug("{Timestamp:yyyy-MM-dd HH:mm:ss} Payload-Länge {Length} übersprungen (erwartet: 4 oder 5)", DateTimeOffset.Now, frame.ManufacturerPayload.Length);
                 continue;
             }
 
@@ -104,13 +71,13 @@ public sealed class ScannerWorker(
                 RawPayloadHex: BitConverter.ToString(frame.ManufacturerPayload)
             );
 
-            if (frame.ManufacturerPayload.Length == 4)
+            var deviceType = frame.ManufacturerPayload.Length == 5 ? "TP358S" : "TP358";
+
+            if (_knownDevices.Add(frame.DeviceMac))
             {
-                logger.LogInformation("{Timestamp:yyyy-MM-dd HH:mm:ss} TP358 4B RAW: MAC={Mac} CompanyId=0x{CompanyId:X4} Payload={Payload}",
-                    DateTimeOffset.Now, frame.DeviceMac, frame.CompanyId, dto.RawPayloadHex);
+                Console.WriteLine($"Sensor erkannt: {frame.DeviceMac} ({deviceType})");
             }
 
-            string deviceType = frame.ManufacturerPayload.Length == 5 ? "TP358S" : "TP358";
             var signalRInterval = _intervalSettings.SignalRInterval;
             var dbInterval = _intervalSettings.DbInterval;
             var shouldSendSignalR = true;
@@ -125,18 +92,8 @@ public sealed class ScannerWorker(
                 var elapsed = now - lastDb;
                 shouldSaveDb = elapsed >= dbInterval;
             }
-            if (!shouldSendSignalR && !shouldSaveDb)
-            {
-                logger.LogTrace(
-                    "{Timestamp:yyyy-MM-dd HH:mm:ss} Gerät {Mac}: Übersprungen (SignalR/DB noch nicht fällig)",
-                    DateTimeOffset.Now, frame.DeviceMac);
-            }
-
             if (shouldSendSignalR)
             {
-                logger.LogInformation("{Timestamp:yyyy-MM-dd HH:mm:ss} [{Type}] Daten gesendet via SignalR: {Mac} | Temp={Temp}°C, Humidity={Hum}%, Battery={Bat}%",
-                    DateTimeOffset.Now, deviceType, dto.DeviceMac, dto.TemperatureC, dto.HumidityPercent, dto.BatteryPercent);
-
                 await hub.Clients.All.SendAsync("reading", dto, cancellationToken: stoppingToken);
                 _lastSignalRSentPerDevice[frame.DeviceMac] = now;
             }
