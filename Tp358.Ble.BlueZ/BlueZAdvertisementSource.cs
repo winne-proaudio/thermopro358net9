@@ -141,6 +141,7 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource, IBleAdapter
     {
         ObjectPath? firstAdapter = null;
         ObjectPath? addressMatch = null;
+        ObjectPath? idMatch = null;
 
         foreach (var (path, interfaces) in managedObjects)
         {
@@ -159,7 +160,7 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource, IBleAdapter
                         || string.Equals(pathString, preferredAdapterId, StringComparison.OrdinalIgnoreCase)
                         || pathString.EndsWith("/" + preferredAdapterId, StringComparison.OrdinalIgnoreCase))
                     {
-                        return path;
+                        idMatch = path;
                     }
                 }
 
@@ -174,7 +175,7 @@ public sealed class BlueZAdvertisementSource : IAdvertisementSource, IBleAdapter
             }
         }
 
-        return addressMatch ?? firstAdapter;
+        return addressMatch ?? idMatch ?? firstAdapter;
     }
 
     private static string? NormalizeAdapterId(string? value)
