@@ -2147,12 +2147,19 @@ const sensors = new Map();
             }
         });
 
+        const loggedSensors = new Set();
+
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/live")
             .withAutomaticReconnect()
             .build();
 
         connection.on("reading", (data) => {
+            if (!loggedSensors.has(data.deviceMac)) {
+                loggedSensors.add(data.deviceMac);
+                const deviceName = getDeviceName(data.deviceMac);
+                console.info(`[TP358] Sensor gefunden: ${deviceName} (${data.deviceMac})`);
+            }
             sensors.set(data.deviceMac, data);
             updateDisplay();
         });
@@ -2162,6 +2169,7 @@ const sensors = new Map();
 
         connection.start()
             .then(() => {
+                console.info('[TP358] Monitor erfolgreich gestartet. SignalR-Verbindung steht.');
                 setConnectionState('ok', 'Verbunden mit Backend');
                 setShutdownEnabled(true);
                 loadDbStatus();
