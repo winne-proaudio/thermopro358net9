@@ -44,3 +44,33 @@ GATT uses standard BLE UUIDs:
   - Battery Level: 0x2A19 (uint8 %)
 
 If your devices expose vendor-specific services/characteristics, you can extend `TryReadGattAsync`.
+
+## TP358 Backend API
+
+`Tp358.Backend` exposes an endpoint for wall panels:
+
+- `GET /api/rooms/latest`
+
+Example response:
+
+```json
+{
+  "generatedAtUtc": "2026-03-07T12:00:00Z",
+  "rooms": [
+    {
+      "roomId": "katzenzimmer",
+      "label": "Katzenzimmer",
+      "currentTemp": 22.3,
+      "timestampUtc": "2026-03-07T11:50:00Z",
+      "stale": false
+    }
+  ]
+}
+```
+
+Behavior:
+
+- Returns latest available value per configured room (`DeviceNames` in `appsettings.json`).
+- Rooms without measurements are still included (`currentTemp = null`, `timestampUtc = null`, `stale = true`).
+- `stale = true` if the latest value is older than 20 minutes.
+- Returns `500` only for real DB errors.

@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Tp358.Ble.Abstractions;
 
 namespace Tp358.Backend;
@@ -81,6 +83,76 @@ internal static class BackendHost
         app.MapGet("/BackendMonitor", () => Results.Redirect("/monitor.html"));
 
         app.MapGet("/health", () => Results.Ok(new { ok = true }));
+        app.MapGet("/health/db", async (DatabaseService databaseService, CancellationToken cancellationToken) =>
+        {
+            if (!databaseService.IsAvailable)
+            {
+                return Results.StatusCode(StatusCodes.Status500InternalServerError);
+            }
+
+            var status = await databaseService.CheckTp358HealthAsync(cancellationToken);
+            if (!status.Ok)
+            {
+                return Results.StatusCode(StatusCodes.Status500InternalServerError);
+            }
+
+            return Results.Ok(new
+            {
+                ok = true,
+                dbDurationMs = status.DbDurationMs
+            });
+        });
+        app.MapGet("/api/rooms/latest", async (
+            IConfiguration config,
+            DatabaseService databaseService,
+            ILoggerFactory loggerFactory,
+            CancellationToken cancellationToken) =>
+        {
+            var logger = loggerFactory.CreateLogger("RoomsLatestApi");
+            var requestStopwatch = Stopwatch.StartNew();
+            var generatedAtUtc = DateTime.UtcNow;
+            var roomDefinitions = ResolveRoomDevices(config);
+
+            if (!databaseService.IsAvailable)
+            {
+                logger.LogError("GET /api/rooms/latest failed: database is unavailable.");
+                return Results.Problem("database unavailable", statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            try
+            {
+                var latest = await databaseService.GetLatestRoomTemperaturesAsync(roomDefinitions, cancellationToken);
+                var staleThresholdUtc = generatedAtUtc.AddMinutes(-20);
+                var rooms = latest.Rooms.Select(room =>
+                {
+                    var timestampUtc = room.TimestampUtc;
+                    var stale = !timestampUtc.HasValue || timestampUtc.Value < staleThresholdUtc;
+                    return new LatestRoomApiModel(
+                        room.RoomId,
+                        room.Label,
+                        room.TemperatureC,
+                        timestampUtc.HasValue ? FormatUtcIsoSeconds(timestampUtc.Value) : null,
+                        stale);
+                }).ToList();
+
+                logger.LogInformation(
+                    "GET /api/rooms/latest ok. rooms={RoomCount}, dbMs={DbDurationMs}, requestMs={RequestDurationMs}",
+                    rooms.Count,
+                    latest.DbDurationMs,
+                    requestStopwatch.ElapsedMilliseconds);
+
+                return Results.Ok(new LatestRoomsResponse(FormatUtcIsoSeconds(generatedAtUtc), rooms));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "GET /api/rooms/latest failed. rooms={RoomCount}, requestMs={RequestDurationMs}",
+                    roomDefinitions.Count,
+                    requestStopwatch.ElapsedMilliseconds);
+                return Results.Problem("database query failed", statusCode: StatusCodes.Status500InternalServerError);
+            }
+        });
         app.MapGet("/status/ble", (IAdvertisementSource source) =>
         {
             var resolvedSource = source is FallbackAdvertisementSource fallbackSource ? fallbackSource.Primary : source;
@@ -367,4 +439,64 @@ internal static class BackendHost
             string.IsNullOrWhiteSpace(fallbackAddress) ? null : fallbackAddress
         );
     }
+
+    private static IReadOnlyList<RoomDeviceDefinition> ResolveRoomDevices(IConfiguration config)
+    {
+        var rooms = new List<RoomDeviceDefinition>();
+        foreach (var child in config.GetSection("DeviceNames").GetChildren())
+        {
+            var mac = child["Mac"] ?? child["mac"];
+            var label = child["Name"] ?? child["name"];
+            if (string.IsNullOrWhiteSpace(mac) || string.IsNullOrWhiteSpace(label))
+            {
+                continue;
+            }
+
+            var normalizedMac = mac.Trim().ToUpperInvariant();
+            var normalizedLabel = label.Trim();
+            var roomId = BuildRoomId(normalizedLabel);
+            rooms.Add(new RoomDeviceDefinition(roomId, normalizedLabel, normalizedMac));
+        }
+
+        return rooms;
+    }
+
+    private static string BuildRoomId(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return "room";
+        }
+
+        var normalized = label.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+        foreach (var ch in normalized)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (category == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(ch))
+            {
+                sb.Append(char.ToLowerInvariant(ch));
+            }
+            else if (sb.Length == 0 || sb[^1] != '-')
+            {
+                sb.Append('-');
+            }
+        }
+
+        var roomId = sb.ToString().Trim('-');
+        return string.IsNullOrWhiteSpace(roomId) ? "room" : roomId;
+    }
+
+    private static string FormatUtcIsoSeconds(DateTime timestampUtc)
+    {
+        return timestampUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
+    }
 }
+
+internal sealed record LatestRoomsResponse(string GeneratedAtUtc, IReadOnlyList<LatestRoomApiModel> Rooms);
+internal sealed record LatestRoomApiModel(string RoomId, string Label, double? CurrentTemp, string? TimestampUtc, bool Stale);

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
+using System.Diagnostics;
 
 namespace Tp358.Backend;
 
@@ -534,9 +535,75 @@ public sealed class DatabaseService
 
         return new ExternalTemperatureStats(0, null, null);
     }
+
+    public async Task<DbHealthStatus> CheckTp358HealthAsync(CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            await using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            const string sql = "SELECT 1;";
+            await using var command = new MySqlCommand(sql, connection);
+            _ = await command.ExecuteScalarAsync(cancellationToken);
+
+            return new DbHealthStatus(true, null, stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "TP358 DB health check failed.");
+            return new DbHealthStatus(false, "db health check failed", stopwatch.ElapsedMilliseconds);
+        }
+    }
+
+    public async Task<LatestRoomQueryResult> GetLatestRoomTemperaturesAsync(
+        IReadOnlyList<RoomDeviceDefinition> rooms,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(rooms);
+
+        var dbStopwatch = Stopwatch.StartNew();
+        var results = new List<LatestRoomTemperatureRow>(rooms.Count);
+
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        foreach (var room in rooms)
+        {
+            const string selectSql = @"
+                SELECT temperature, measured_at
+                FROM measurements
+                WHERE device_mac = @deviceMac
+                ORDER BY measured_at DESC
+                LIMIT 1;
+            ";
+
+            await using var command = new MySqlCommand(selectSql, connection);
+            command.Parameters.AddWithValue("@deviceMac", room.DeviceMac);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                var temperature = reader.IsDBNull(0) ? (double?)null : reader.GetDouble(0);
+                var measuredAt = reader.IsDBNull(1) ? (DateTime?)null : DateTime.SpecifyKind(reader.GetDateTime(1), DateTimeKind.Utc);
+                results.Add(new LatestRoomTemperatureRow(room.RoomId, room.Label, temperature, measuredAt));
+            }
+            else
+            {
+                results.Add(new LatestRoomTemperatureRow(room.RoomId, room.Label, null, null));
+            }
+        }
+
+        return new LatestRoomQueryResult(results, dbStopwatch.ElapsedMilliseconds);
+    }
 }
 
 public sealed record TemperatureMeasurement(string DeviceMac, double? TemperatureC, int? HumidityPercent, DateTime MeasuredAt);
 public sealed record TemperatureStats(long Count, DateTime? MinTimestamp, DateTime? MaxTimestamp);
 public sealed record ExternalTemperatureMeasurement(string DeviceId, DateTime Timestamp, double? Temperature);
 public sealed record ExternalTemperatureStats(long Count, DateTime? MinTimestamp, DateTime? MaxTimestamp);
+public sealed record RoomDeviceDefinition(string RoomId, string Label, string DeviceMac);
+public sealed record LatestRoomTemperatureRow(string RoomId, string Label, double? TemperatureC, DateTime? TimestampUtc);
+public sealed record LatestRoomQueryResult(IReadOnlyList<LatestRoomTemperatureRow> Rooms, long DbDurationMs);
+public sealed record DbHealthStatus(bool Ok, string? Error, long DbDurationMs);
