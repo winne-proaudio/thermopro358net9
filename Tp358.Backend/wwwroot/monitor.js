@@ -339,6 +339,8 @@ const sensors = new Map();
         const settingsBleWarningValue = document.getElementById('settingsBleWarningValue');
         const settingsSaveButton = document.getElementById('settingsSaveButton');
         const settingsStatus = document.getElementById('settingsStatus');
+        const settingsRestartBluetoothButton = document.getElementById('settingsRestartBluetoothButton');
+        const settingsRestartStatus = document.getElementById('settingsRestartStatus');
 
         let currentView = 'home';
         let graphRefreshTimer = null;
@@ -514,6 +516,9 @@ const sensors = new Map();
         }
         if (settingsSaveButton) {
             settingsSaveButton.addEventListener('click', saveIntervalSettings);
+        }
+        if (settingsRestartBluetoothButton) {
+            settingsRestartBluetoothButton.addEventListener('click', restartBluetoothService);
         }
 
         function initializeFlowEnergyStart() {
@@ -849,6 +854,39 @@ const sensors = new Map();
                 if (settingsStatus) {
                     settingsStatus.textContent = 'Fehler beim Speichern';
                 }
+            }
+        }
+
+        async function restartBluetoothService() {
+            if (!settingsRestartBluetoothButton) {
+                return;
+            }
+
+            const confirmed = window.confirm('Bluetooth-Recovery jetzt starten?');
+            if (!confirmed) {
+                return;
+            }
+
+            settingsRestartBluetoothButton.disabled = true;
+            if (settingsRestartStatus) {
+                settingsRestartStatus.textContent = 'Starte Recovery...';
+            }
+
+            try {
+                const response = await fetch('/ops/bluetooth/restart', { method: 'POST' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                if (settingsRestartStatus) {
+                    settingsRestartStatus.textContent = 'Recovery ausgeloest';
+                }
+            } catch (error) {
+                console.error('Bluetooth Recovery Error:', error);
+                if (settingsRestartStatus) {
+                    settingsRestartStatus.textContent = 'Fehler beim Triggern';
+                }
+            } finally {
+                settingsRestartBluetoothButton.disabled = false;
             }
         }
 

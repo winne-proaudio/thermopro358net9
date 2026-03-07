@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using Tp358.Ble.Abstractions;
@@ -129,6 +130,78 @@ internal static class BackendHost
 
             var snapshot = store.Update(update);
             return Results.Ok(snapshot);
+        });
+        app.MapPost("/ops/bluetooth/restart", async (IConfiguration config, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                return Results.BadRequest(new { error = "Bluetooth restart is only supported on Linux hosts." });
+            }
+
+            var logger = loggerFactory.CreateLogger("BluetoothRecovery");
+            var command = config["Operations:BluetoothRestartCommand"];
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return Results.StatusCode(StatusCodes.Status501NotImplemented);
+            }
+
+            var timeoutSeconds = Math.Clamp(config.GetValue<int?>("Operations:BluetoothRestartTimeoutSeconds") ?? 30, 5, 120);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "/bin/bash",
+                    ArgumentList = { "-lc", command },
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                }
+            };
+
+            try
+            {
+                process.Start();
+                var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+                var stderrTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
+                await process.WaitForExitAsync(linkedCts.Token);
+
+                _ = await stdoutTask;
+                var stderr = (await stderrTask).Trim();
+                var ok = process.ExitCode == 0;
+                if (ok)
+                {
+                    logger.LogWarning("Bluetooth recovery command executed successfully.");
+                    return Results.Ok(new { ok = true, message = "Bluetooth recovery gestartet." });
+                }
+
+                logger.LogWarning("Bluetooth recovery command failed. ExitCode={ExitCode}. stderr={Stderr}", process.ExitCode, stderr);
+                return Results.StatusCode(StatusCodes.Status502BadGateway);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch
+                {
+                    // Ignore kill cleanup errors.
+                }
+
+                logger.LogWarning("Bluetooth recovery command timed out after {TimeoutSeconds}s.", timeoutSeconds);
+                return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Bluetooth recovery command failed to execute.");
+                return Results.StatusCode(StatusCodes.Status500InternalServerError);
+            }
         });
 
         app.MapGet("/live/data", (ScannerWorker worker) =>
