@@ -18,7 +18,7 @@ internal static class BackendHost
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        builder.WebHost.UseUrls("http://0.0.0.0:5055");
+        builder.WebHost.UseUrls("http://0.0.0.0:5050");
         builder.Services.AddSignalR();
 
         builder.Services.AddSingleton<DatabaseService>();
